@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import torch
 from ase import Atoms
-from ase.build import molecule
+from ase.build import bulk, molecule
 
 import schnetpack as spk
 
@@ -492,4 +492,56 @@ def mace_off_reference(mace_off_archive):
         energy, forces = atoms.get_potential_energy(), atoms.get_forces()
         atoms.calc = None
         reference.append((name, atoms, energy, forces))
+    return reference
+
+
+# MACE-MP, exported by schnetpack.interfaces.mace_interface
+@pytest.fixture(scope="session")
+def mace_mp_archive():
+    """MACE-MP-0b3 medium as a torch.export archive in the interface's cache;
+    the first run downloads the weights. Skipped without mace-torch."""
+    if importlib.util.find_spec("mace") is None:
+        pytest.skip("needs mace-torch: pip install 'schnetpack[mace]'")
+    from schnetpack.interfaces.mace_interface import export_mace_mp
+
+    return export_mace_mp("medium-0b3")
+
+
+def mace_mp_structures():
+    """Strained and rattled crystals: silicon and rock salt in their primitive
+    cells, smaller than the cutoff, and eight atoms of hcp titanium."""
+    rng = np.random.default_rng(0)
+    structures = {
+        "Si": bulk("Si", "diamond", a=5.43),
+        "NaCl": bulk("NaCl", "rocksalt", a=5.64),
+        "Ti": bulk("Ti", "hcp", a=2.95, c=4.68).repeat((2, 2, 1)),
+    }
+    for atoms in structures.values():
+        strain = np.eye(3) + 0.04 * rng.normal(size=(3, 3))
+        atoms.set_cell(atoms.cell @ strain, scale_atoms=True)
+        atoms.rattle(0.05, seed=1)
+    return structures
+
+
+@pytest.fixture(scope="session")
+def mace_mp_reference(mace_mp_archive):
+    """MACE's own energies, forces and stresses (eV, eV/Å, eV/Å³ as a 3 x 3
+    matrix) on :func:`mace_mp_structures`, from eager MACE-MP-0b3 medium, as
+    ``(name, atoms, energy, forces, stress)``."""
+    with pytest.MonkeyPatch.context() as patch, warnings.catch_warnings():
+        patch.setenv("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
+        warnings.filterwarnings(
+            "ignore", "Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected"
+        )
+        from mace.calculators import mace_mp
+
+        calc = mace_mp(model="medium-0b3", default_dtype="float64", device="cpu")
+
+    reference = []
+    for name, atoms in mace_mp_structures().items():
+        atoms.calc = calc
+        energy, forces = atoms.get_potential_energy(), atoms.get_forces()
+        stress = atoms.get_stress(voigt=False)
+        atoms.calc = None
+        reference.append((name, atoms, energy, forces, stress))
     return reference

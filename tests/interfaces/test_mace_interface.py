@@ -1,7 +1,7 @@
-"""The MACE interface: MACE-OFF exported with torch.export, and MACE models
-with random weights built for a dataset. The golden test runs SchNetPack's
-MaceTeacher on the exported archive against eager MACE; it and the built
-models need mace-torch, and are skipped without."""
+"""The MACE interface: MACE-OFF and MACE-MP exported with torch.export, and
+MACE models with random weights built for a dataset. The golden tests run
+SchNetPack's MaceTeacher and MaceModel on the exported archives against eager
+MACE; they and the built models need mace-torch, and are skipped without."""
 
 import importlib.util
 import os
@@ -22,6 +22,7 @@ from schnetpack.interfaces.mace_interface import (
     _avg_num_neighbors,
     _force_rms,
     build_mace,
+    export_mace_mp,
     export_mace_off,
 )
 from schnetpack.model import MaceModel, load_mace
@@ -94,6 +95,38 @@ def test_the_exported_archive_reproduces_mace(mace_off_archive, mace_off_referen
             atol=1e-6,
             msg=name,
         )
+
+
+def test_an_unknown_mace_mp_model_is_refused(mace_mp_archive):
+    with pytest.raises(ValueError, match="huge"):
+        export_mace_mp("huge")
+
+
+def test_the_exported_mace_mp_reproduces_maces_stress(
+    mace_mp_archive, mace_mp_reference
+):
+    """The golden test for crystals: energy, forces and the stress MaceModel
+    takes from the archive are MACE's own."""
+    model = MaceModel(load_mace(mace_mp_archive), stress_key=properties.stress).eval()
+    for name, atoms, energy, forces, stress in mace_mp_reference:
+        batch = with_neighbors(
+            atoms_to_batch([atoms], dtype=torch.float64), cutoff=model.r_max
+        )
+
+        output = model(batch)
+
+        for key, expected in (
+            (properties.energy, [energy]),
+            (properties.forces, forces),
+            (properties.stress, stress[None]),
+        ):
+            torch.testing.assert_close(
+                output[key],
+                torch.as_tensor(np.asarray(expected), dtype=torch.float64),
+                rtol=0,
+                atol=1e-6,
+                msg=f"{name}: {key}",
+            )
 
 
 # MACE models with random weights, built for a dataset

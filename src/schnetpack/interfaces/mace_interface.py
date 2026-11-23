@@ -5,8 +5,10 @@
 to an archive that :func:`~schnetpack.model.load_mace` reads without
 ``mace-torch``. :func:`export_mace_off` builds MACE-OFF23 and writes
 ``MACE-OFF23_<size>_mace-<version>.pt2`` to :data:`CACHE_DIR`;
-:func:`build_mace` writes a MACE model with random weights, to be trained from
-scratch (``experiment=mace_scratch``). Both are developer tools and need
+:func:`export_mace_mp` does the same for the MACE-MP models of materials
+(``MACE-MP_<model>_mace-<version>.pt2``). :func:`build_mace` writes a MACE
+model with random weights, to be trained from scratch
+(``experiment=mace_scratch``). All three are developer tools and need
 ``mace-torch``, which SchNetPack does not depend on::
 
     pip install "schnetpack[mace]"
@@ -16,7 +18,7 @@ import contextlib
 import io
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import torch
@@ -33,6 +35,7 @@ __all__ = [
     "MACE_OFF_SIZES",
     "build_mace",
     "export_mace",
+    "export_mace_mp",
     "export_mace_off",
 ]
 
@@ -44,6 +47,15 @@ MACE_OFF_SIZES = ("small", "medium", "large")
 #: torch >= 2.6; left set, it would turn off ``weights_only`` for every later
 #: ``torch.load`` in the process
 _NO_WEIGHTS_ONLY = "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"
+
+#: buffers of MACE's pair repulsion from before it took its cutoff from the
+#: covalent radii; models pickled then (MACE-MP-0b and later) still carry them,
+#: and MACE no longer reads them
+_OBSOLETE = {
+    "pair_repulsion_fn.r_max",
+    "pair_repulsion_fn.cutoff.p",
+    "pair_repulsion_fn.cutoff.r_max",
+}
 
 #: the dimension of each input that varies with the batch: atoms, edges or
 #: structures
@@ -189,34 +201,72 @@ def export_mace_off(size: str = "medium", cache_dir: str = CACHE_DIR) -> str:
             f"unknown MACE-OFF size {size!r}, expected one of {MACE_OFF_SIZES}"
         )
 
+    def load():
+        from mace.calculators import mace_off
+
+        return mace_off(model=size, default_dtype="float64", device="cpu").models[0]
+
+    return _export_pretrained(f"MACE-OFF23_{size}", load, cache_dir)
+
+
+def export_mace_mp(model: str = "medium-0b3", cache_dir: str = CACHE_DIR) -> str:
+    """Export a MACE-MP model for materials (see :func:`export_mace`) and
+    return the archive's path.
+
+    MACE downloads the weights on first use, and prints the license of those
+    that are not under MIT. The model is exported in float64; an archive
+    already in ``cache_dir`` is reused. A :class:`~schnetpack.model.MaceModel`
+    with ``stress_key`` gives the archive's stress.
+
+    Args:
+        model: name of the model as ``mace.calculators.mace_mp`` takes it.
+            The default, MACE-MP-0b3 medium, is trained on MPtrj.
+        cache_dir: directory the archive is written to.
+    """
+
+    def load():
+        from mace.calculators import mace_mp
+        from mace.calculators.foundations_models import mace_mp_urls
+
+        if model not in mace_mp_urls:
+            raise ValueError(
+                f"unknown MACE-MP model {model!r}, expected one of {list(mace_mp_urls)}"
+            )
+        return mace_mp(model=model, default_dtype="float64", device="cpu").models[0]
+
+    return _export_pretrained(f"MACE-MP_{model}", load, cache_dir)
+
+
+def _export_pretrained(name: str, load: Callable[[], nn.Module], cache_dir: str) -> str:
+    """Export the pretrained MACE model ``load`` returns to
+    ``<name>_mace-<version>.pt2`` in ``cache_dir``, unless it is there."""
     with _mace_environment():
         mace = _import_mace()
-        path = os.path.join(cache_dir, f"MACE-OFF23_{size}_mace-{mace.__version__}.pt2")
+        path = os.path.join(cache_dir, f"{name}_mace-{mace.__version__}.pt2")
         if not os.path.exists(path):
             os.makedirs(cache_dir, exist_ok=True)
             # written under another name first, so that an interrupted run is
             # not taken for a cached archive
             partial = path + ".part"
-            export_mace(_mace_off(size), partial)
+            export_mace(_rebuilt(load()), partial)
             os.replace(partial, path)
     return path
 
 
-def _mace_off(size: str) -> nn.Module:
-    """MACE-OFF23 in float64, rebuilt from its config with e3nn's code
-    generation off: the pickled model holds TorchScript, which
+def _rebuilt(pickled: nn.Module) -> nn.Module:
+    """A pretrained MACE model in float64, rebuilt from its config with e3nn's
+    code generation off: the pickled model holds TorchScript, which
     ``torch.export`` cannot trace."""
-    from mace.calculators import mace_off
     from mace.tools.scripts_utils import extract_config_mace_model
 
-    pickled = mace_off(model=size, default_dtype="float64", device="cpu").models[0]
     model = _traceable(type(pickled), extract_config_mace_model(pickled))
     missing, unexpected = model.load_state_dict(pickled.state_dict(), strict=False)
     # buffers of newer MACE versions than the one that pickled the model keep
     # the values they are built with
+    unexpected = sorted(set(unexpected) - _OBSOLETE)
     if unexpected or any(not key.endswith("_zeroed") for key in missing):
         raise RuntimeError(
-            f"MACE-OFF23 {size} does not fit its rebuilt model: missing {missing}, "
+            f"the pretrained model does not fit its rebuilt model: missing {missing}, "
             f"unexpected {unexpected}"
         )
     return model.eval()

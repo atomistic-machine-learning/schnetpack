@@ -5,7 +5,8 @@ format, so that one object serves as the potential of a
 :mod:`~schnetpack.dynamics` driver and as distillation teacher
 (:class:`~schnetpack.train.MaceTeacher`). The core is a ``torch.export``
 archive (``.pt2``), read by :func:`load_mace` into an :class:`ExportedMace`, as
-:func:`~schnetpack.interfaces.mace_interface.export_mace_off` writes them;
+:func:`~schnetpack.interfaces.mace_interface.export_mace_off` and
+:func:`~schnetpack.interfaces.mace_interface.export_mace_mp` write them;
 loading it needs no ``mace-torch``.
 
 MACE works in eV and Å, the defaults of
@@ -20,6 +21,11 @@ core's :attr:`~MaceModel.r_max`::
 
 Cast with ``MaceModel(dtype=...)`` rather than ``ForceCalculator(dtype=...)``:
 the latter casts the whole model, and rounds the float64 E0s with it.
+
+For crystals, ``MaceModel(..., stress_key="stress")`` adds the stress, so that
+an ASE cell filter can relax the cell through
+:class:`~schnetpack.interfaces.SpkCalculator` (``stress_key="stress"``,
+``energy_unit="eV"``).
 
 A ``MaceModel`` trains like any SchNetPack model (``experiment=mace_finetune``),
 also from random weights (``experiment=mace_scratch``, on a core that
@@ -43,6 +49,7 @@ from torch import nn
 from torch.autograd import grad
 
 from schnetpack import properties
+from schnetpack.model.atomistic.response import Strain
 from schnetpack.model.base import AtomisticModel
 from schnetpack.transform import AddOffsets, CastTo64, Transform
 from schnetpack.utils import as_dtype
@@ -100,10 +107,18 @@ class MaceModel(AtomisticModel):
     The core's forces keep their graph in train mode, through MACE's
     ``training`` argument. Only the first head of a multi-head core is used.
 
+    With ``stress_key`` the model also returns the stress of periodic
+    structures: the derivative of the energy with respect to a strain of
+    positions, cell and neighbor offsets, divided by the cell volume, as
+    :class:`~schnetpack.model.Forces` computes it (eV/Å³, positive under
+    tension). Forces and stress are then taken here in one pass, for a MACE
+    model and an exported archive alike.
+
     Args:
         core: the MACE model, as :func:`load_mace` returns it.
         energy_key: output key of the energy.
         force_key: output key of the forces.
+        stress_key: output key of the stress; None for no stress.
         postprocessors: transforms applied to the outputs when
             ``do_postprocessing`` is on. None adds the E0s ``e0s`` names.
         do_postprocessing: whether the postprocessors run.
@@ -118,11 +133,15 @@ class MaceModel(AtomisticModel):
             :meth:`initialize_transforms`.
     """
 
+    #: for models pickled before the stress was added
+    stress_key: str | None = None
+
     def __init__(
         self,
         core: nn.Module,
         energy_key: str = properties.energy,
         force_key: str = properties.forces,
+        stress_key: str | None = None,
         postprocessors: Sequence[Transform] | None = None,
         do_postprocessing: bool = True,
         dtype: torch.dtype | str | None = None,
@@ -149,11 +168,14 @@ class MaceModel(AtomisticModel):
         self.core = core
         self.energy_key = energy_key
         self.force_key = force_key
+        self.stress_key = stress_key
         self.e0s = e0s
         self.fit_e0_correction = fit_e0_correction
         self._e0_correction_fitted = False
         self.required_derivatives = [properties.R]
         self.model_outputs = [energy_key, force_key]
+        if stress_key is not None:
+            self.model_outputs.append(stress_key)
         size = int(core.atomic_numbers.max()) + 1
         self.register_buffer("e0_correction", torch.zeros(size, dtype=torch.float64))
 
@@ -164,8 +186,11 @@ class MaceModel(AtomisticModel):
 
     def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         inputs = self.initialize_derivatives(inputs)
+        with_stress = self.stress_key is not None
+        if with_stress:
+            inputs = Strain()(inputs)
         data = mace_input(inputs, self.core.atomic_numbers)
-        output = self.core(data, training=self.training)
+        output = self.core(data, training=self.training, compute_force=not with_stress)
 
         interaction = output.get("interaction_energy")
         if interaction is None:
@@ -177,7 +202,18 @@ class MaceModel(AtomisticModel):
         inputs[self.energy_key] = interaction.index_add(
             0, inputs[properties.idx_m], correction
         )
-        inputs[self.force_key] = output["forces"]
+        if with_stress:
+            gradient, strain_gradient = grad(
+                [interaction.sum()],
+                [inputs[properties.R], inputs[properties.strain]],
+                create_graph=self.training,
+            )
+            # detached: the strained cell carries the strain's graph
+            volume = torch.linalg.det(inputs[properties.cell]).abs().detach()
+            inputs[self.force_key] = -gradient
+            inputs[self.stress_key] = strain_gradient / volume[:, None, None]
+        else:
+            inputs[self.force_key] = output["forces"]
 
         inputs = self.postprocess(inputs)
         return self.extract_outputs(inputs)

@@ -1,14 +1,15 @@
 """MaceModel on the stand-in: SchNetPack batches in, energies with the
-E0s as offsets out, in a relaxation. Its match with MACE-OFF is the MACE
-interface's golden test."""
+E0s as offsets out, in a relaxation. Its match with MACE-OFF and MACE-MP is
+the MACE interface's golden test."""
 
+import numpy as np
 import pytest
 import torch
 from torch.autograd import grad
 
 from schnetpack import properties
 from schnetpack.dynamics import LBFGS, BatchNeighborList, ForceCalculator
-from schnetpack.interfaces.ase_interface import atoms_to_batch
+from schnetpack.interfaces.ase_interface import SpkCalculator, atoms_to_batch
 from schnetpack.interfaces.mace_interface import export_mace
 from schnetpack.model import MaceModel, load_mace
 from schnetpack.transform import MatScipyNeighborList
@@ -110,6 +111,97 @@ def test_a_multi_head_core_warns_and_uses_its_first_head():
     energies, _ = reference(structures)
     torch.testing.assert_close(
         model(batch)[properties.energy], torch.stack(energies).detach()
+    )
+
+
+def strained(atoms, strain):
+    """``atoms`` with positions and cell vectors x mapped to (1 + strain) x."""
+    copy = atoms.copy()
+    copy.set_cell(atoms.cell @ (np.eye(3) + strain).T, scale_atoms=True)
+    return copy
+
+
+def test_the_stress_is_the_strain_derivative_of_the_energy_per_volume():
+    """Against a finite difference, component by component: the stand-in is
+    not invariant under rotation, so its stress is not symmetric and a
+    transposed strain would show."""
+    atoms = strained(periodic()[0], 0.05 * np.random.default_rng(0).normal(size=(3, 3)))
+    model = MaceModel(FakeMace()).eval()
+
+    def energy(structure):
+        batch = with_neighbors(atoms_to_batch([structure], dtype=torch.float64))
+        return model(batch)[properties.energy].item()
+
+    step = 1e-5
+    numeric = torch.zeros(3, 3, dtype=torch.float64)
+    for a in range(3):
+        for b in range(3):
+            strain = np.zeros((3, 3))
+            strain[a, b] = step
+            difference = energy(strained(atoms, strain)) - energy(
+                strained(atoms, -strain)
+            )
+            numeric[a, b] = difference / (2 * step * atoms.get_volume())
+
+    batch = with_neighbors(atoms_to_batch([atoms], dtype=torch.float64))
+    output = MaceModel(FakeMace(), stress_key=properties.stress).eval()(dict(batch))
+
+    stress = output[properties.stress]
+    assert not stress.requires_grad
+    assert (stress[0] - stress[0].T).abs().max() > 1e-3
+    torch.testing.assert_close(stress[0], numeric, rtol=0, atol=1e-7)
+    plain = model(dict(batch))
+    assert properties.stress not in plain
+    torch.testing.assert_close(output[properties.energy], plain[properties.energy])
+    torch.testing.assert_close(output[properties.forces], plain[properties.forces])
+
+
+def test_each_structure_of_a_batch_gets_its_own_stress():
+    structures = [periodic()[0], strained(periodic()[0], 0.1 * np.eye(3))]
+    model = MaceModel(FakeMace(), stress_key=properties.stress).eval()
+
+    def stress(atoms_list):
+        batch = with_neighbors(atoms_to_batch(atoms_list, dtype=torch.float64))
+        return model(batch)[properties.stress]
+
+    torch.testing.assert_close(
+        stress(structures), torch.cat([stress([atoms]) for atoms in structures])
+    )
+
+
+def test_an_archive_gives_the_stress_of_its_model(tmp_path):
+    path = export_mace(FakeMace(), str(tmp_path / "mace.pt"))
+    batch = with_neighbors(atoms_to_batch(periodic(), dtype=torch.float64))
+
+    exported = MaceModel(load_mace(path), stress_key=properties.stress).eval()
+    plain = MaceModel(FakeMace(), stress_key=properties.stress).eval()
+
+    output, expected = exported(dict(batch)), plain(dict(batch))
+    for key in (properties.energy, properties.forces, properties.stress):
+        torch.testing.assert_close(output[key], expected[key])
+
+
+def test_the_ase_calculator_hands_on_the_stress():
+    """SpkCalculator activates the stress of our own models; this one returns
+    it already."""
+    atoms = periodic()[0]
+    model = MaceModel(FakeMace(), stress_key=properties.stress)
+    batch = with_neighbors(atoms_to_batch([atoms], dtype=torch.float64), cutoff=R_MAX)
+    expected = model.eval()(batch)
+
+    atoms.calc = SpkCalculator(
+        model,
+        neighbor_list=MatScipyNeighborList(cutoff=R_MAX),
+        stress_key=properties.stress,
+        energy_unit="eV",
+        dtype=torch.float64,
+    )
+
+    # ASE keeps the symmetric part, and the stand-in's stress has another
+    stress = expected[properties.stress][0].numpy()
+    np.testing.assert_allclose(atoms.get_stress(voigt=False), (stress + stress.T) / 2)
+    np.testing.assert_allclose(
+        atoms.get_potential_energy(), expected[properties.energy].item()
     )
 
 

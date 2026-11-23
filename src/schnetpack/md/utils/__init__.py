@@ -27,6 +27,10 @@ def activate_model_stress(model: AtomisticModel, stress_key: str) -> AtomisticMo
     Returns:
         model (AtomisticTask): schnetpack model with activated stress tensor.
     """
+    # a model that returns the stress already (e.g. `MaceModel(stress_key=...)`)
+    if stress_key in model.model_outputs:
+        return model
+
     stress = False
 
     # Check if a module suitable for stress computation is present

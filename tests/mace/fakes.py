@@ -148,9 +148,9 @@ class RecordingMace(nn.Module):
         if hasattr(model, "atomic_energies_fn"):
             self.atomic_energies_fn = model.atomic_energies_fn
 
-    def forward(self, data, training=False):
+    def forward(self, data, training=False, compute_force=True):
         self.training_argument = training
-        return self.model(data, training=training)
+        return self.model(data, training=training, compute_force=compute_force)
 
 
 def rattled(names):
