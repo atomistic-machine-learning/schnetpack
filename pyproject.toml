@@ -69,8 +69,11 @@ mace = ["mace-torch>=0.3.16,<0.4"]
 compile = ["torch>=2.14"]
 # validity and uniqueness of generated molecules (spk evaluate)
 rdkit = ["rdkit"]
+# validity, uniqueness, novelty and stability of generated crystals (spk evaluate);
+# smact 4 for its ICSD-2024 oxidation states
+crystals = ["pymatgen", "smact>=4"]
 # every extra above
-all = ["schnetpack[test,dev,doc,mace,compile,rdkit]"]
+all = ["schnetpack[test,dev,doc,mace,compile,rdkit,crystals]"]
 
 [project.urls]
 Repository = "https://github.com/atomistic-machine-learning/schnetpack"

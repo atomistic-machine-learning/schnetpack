@@ -337,6 +337,73 @@ def test_spk_evaluate_writes_one_entry_per_db_to_eval_json(tmp_path):
     assert result["uniqueness"] == pytest.approx(2 / 3)
 
 
+def test_spk_evaluate_relaxes_crystals_with_the_calculator_it_is_given(tmp_path):
+    pytest.importorskip("pymatgen")
+    pytest.importorskip("smact")
+    from ase.build import bulk
+    from ase.calculators.emt import EMT
+
+    def alloy():  # Cu and Au in alternating layers of fcc
+        atoms = bulk("Cu", cubic=True, a=3.9) * (1, 1, 2)
+        atoms.symbols = ["Cu", "Au"] * 4
+        return atoms
+
+    copper = bulk("Cu", cubic=True, a=3.7)
+    close = copper.copy()
+    close.positions[1] = close.positions[0] + 0.2
+    with connect(tmp_path / "samples.db") as db:
+        for seed in (1, 2):  # one crystal twice
+            atoms = copper.copy()
+            atoms.rattle(0.05, seed=seed)
+            db.write(atoms)
+        db.write(alloy())
+        db.write(close)  # structurally invalid
+        db.write(bulk("Si", cubic=True))  # EMT has no silicon: not relaxed
+    with connect(tmp_path / "known.db") as db:
+        db.write(bulk("Cu", a=3.6))  # row 0, train
+        db.write(alloy())  # row 1, test
+    np.savez(tmp_path / "split.npz", train_idx=[0], val_idx=[], test_idx=[1])
+    with connect(tmp_path / "hull.db") as db:
+        for atoms in (bulk("Cu", a=3.6), bulk("Au", a=4.08), bulk("Cu", a=3.9)):
+            atoms.calc = EMT()
+            energy = atoms.get_potential_energy()
+            atoms.calc = None
+            db.write(atoms, data={"energy": np.array([energy])})
+
+    spk("evaluate", "dbs=samples.db", cwd=tmp_path)
+    result = json.loads((tmp_path / "eval.json").read_text())["samples"]
+    assert result["scored"] == "generated"
+    assert (result["structure_validity"], result["composition_validity"]) == (0.8, 1.0)
+    assert result["uniqueness"] == 0.6  # copper once, the alloy, silicon
+    assert "novelty" not in result and "stability" not in result
+
+    spk(
+        "evaluate",
+        "dbs=samples.db",
+        "known=known.db",
+        "split=split.npz",
+        "calculator={_target_: ase.calculators.emt.EMT}",
+        "hull=hull.db",
+        cwd=tmp_path,
+    )
+    result = json.loads((tmp_path / "eval.json").read_text())["samples"]
+    assert result["scored"] == "relaxed"
+    assert (result["n_relaxed"], result["n_converged"]) == (3, 3)
+    assert result["energy_change"] < 0
+    assert result["uniqueness"] == 0.4  # copper once and the alloy
+    assert result["novelty"] == 0.2  # the alloy: its known copy is a test crystal
+    assert result["stability"] == 0.6
+    assert result["sun"] == 0.2
+    with connect(tmp_path / "relaxed" / "samples.db") as db:
+        rows = list(db.select())
+    assert [row.generated_id for row in rows] == [1, 2, 3]
+    assert all(row.data["energy"] < row.data["energy_generated"] for row in rows)
+
+    assert (
+        spk("evaluate", "dbs=samples.db", "hull=hull.db", cwd=tmp_path, check=False)
+    ).returncode != 0  # the energies of a hull come from a calculator
+
+
 def test_spk_convert_updates_the_metadata_of_an_old_db(tmp_path):
     with connect(tmp_path / "data.db") as db:
         db.write(molecule("H2O"), data={"dipole": np.zeros(3)})

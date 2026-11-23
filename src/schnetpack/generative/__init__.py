@@ -26,8 +26,9 @@ A model is a configuration of four independent axes plus its training:
 - :mod:`~schnetpack.generative.transforms`: the training step, as a
   data-pipeline transform over a list of variables.
 - :mod:`~schnetpack.generative.validation`: metrics of generated molecules
-  (validity, uniqueness, novelty, diversity, distances between distributions);
-  needs RDKit.
+  (validity, uniqueness, novelty, diversity, distances between distributions) and
+  crystals (validity, uniqueness, novelty, energy above the hull); needs RDKit
+  for molecules, pymatgen and smact for crystals.
 
 Running a trained model lives in :mod:`schnetpack.dynamics`. Training and
 sampling must share the same variables. Theory and

@@ -1,12 +1,28 @@
-# spk evaluate dbs=<ASE db or pattern, or a list of them>: validity and uniqueness of
-# generated molecules (RDKit), into eval.json next to each db. Quote patterns:
+# spk evaluate dbs=<ASE db or pattern, or a list of them>: metrics of generated
+# structures into eval.json next to each db. Quote patterns:
 #   spk evaluate 'dbs=runs/gpff/samples/*.db'
+# Molecules: validity and uniqueness (RDKit). Crystals (a periodic cell): validity,
+# uniqueness, novelty against `known`; with a `calculator` they are relaxed first, and
+# with a `hull` their stability is added.
 defaults:
   - override hydra/job_logging: stdout
   - _self_
 
-dbs: ???  # ASE dbs of molecules (spk sample's), patterns allowed
+dbs: ???  # ASE dbs of generated structures (spk sample's), patterns allowed
 timeout: 5  # seconds per molecule
+
+# crystals
+known: null  # ASE db of known crystals, for the novelty
+split: null  # a run's split file: only the train and val rows of `known` count
+# an ASE calculator with a stress that relaxes the crystals, as a Hydra target:
+#   'calculator={_target_: ase.calculators.emt.EMT}'
+#   'calculator={_target_: schnetpack.interfaces.ase_interface.SpkCalculator, model: <model>, neighbor_list: {_target_: schnetpack.transform.MatScipyNeighborList, cutoff: 5.0}, stress_key: stress, energy_unit: eV}'
+calculator: null
+fmax: 0.05  # eV/A: the relaxation ends when the largest force is below
+steps: 500  # or after this many steps
+hull: null  # ASE db of reference phases; energies from the calculator's level of theory
+hull_energy: energy  # the name of the total energy (eV) in the hull db
+stable_below: 0.1  # eV per atom above the hull
 
 hydra:
   output_subdir: null
