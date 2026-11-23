@@ -521,9 +521,14 @@ def test_a_saved_format_1_model_loads_with_the_same_outputs():
 
     assert spk.load_hyperparameters(FORMAT_1)["format"] == 1
     assert sorted(outputs) == sorted(expected)
+    # the model computes in float32 and casts its outputs to float64: the stored
+    # values are met to float32 accuracy on another platform or Python version
     for name, value in expected.items():
         torch.testing.assert_close(
-            outputs[name], torch.tensor(value, dtype=outputs[name].dtype)
+            outputs[name],
+            torch.tensor(value, dtype=outputs[name].dtype),
+            rtol=1e-5,
+            atol=1e-5,
         )
 
 

@@ -19,8 +19,8 @@ __all__ = ["MP20"]
 class MP20(DownloadableASEAtomsData):
     """
     MP-20: 45,229 inorganic crystals from the Materials Project with at most 20 atoms
-    per cell, the benchmark of crystal generation introduced with CDVAE [#mp20_1]_
-    and used by DiffCSP [#mp20_2]_, FlowMM and MatterGen.
+    per cell. It is the benchmark of crystal generation introduced with CDVAE
+    [#mp20_1]_ and used by DiffCSP [#mp20_2]_, FlowMM and MatterGen.
 
     The CSV files are read from the CDVAE repository at a fixed commit. Each crystal
     is read from its CIF as written there; pymatgen, which the reference code uses,
