@@ -2,8 +2,11 @@ schnetpack.utils
 ================
 .. currentmodule:: schnetpack.utils
 
-Loading models
---------------
+Loading pickled models
+----------------------
+
+Model files pickled by SchNetPack 2.x or an earlier 3.0 version. A model folder
+loads with :func:`schnetpack.load_model`.
 
 .. autosummary::
     :toctree: generated

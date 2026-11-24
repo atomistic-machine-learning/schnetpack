@@ -212,7 +212,7 @@ defaults:
 Here is a description of the purpose of the different config groups:
 
 - **run**: defines run-specific variables, such as the run `id`, or working and data directories
-- **globals**: defines custom variables that can be reused across the whole config by making use of the interpolation syntax `${globals.variable}`
+- **globals**: defines custom variables that can be reused across the whole config by making use of the interpolation syntax `${globals.variable}`; `globals.model_path` is the folder the best model is saved to (see [Saving and loading models](saving_models.md))
 - **data**: defines the {class}`lightning.AtomsDataModule` to be used
 - **model**: defines the {class}`model.AtomisticModel` to be used
 - **task**: defines the {class}`lightning.AtomisticTask`
@@ -486,7 +486,8 @@ Compilation requires torch 2.14 or newer, since earlier versions can trace wrong
 gradients of a force loss; with an older torch, switching it on raises an error.
 `pip install schnetpack[compile]` installs a recent enough torch.
 Distillation runs the model without compilation. The stored models
-are not affected: the best model is saved as a regular `AtomisticModel`.
+are not affected: the best model is saved as a model folder of the plain model
+(see [Saving and loading models](saving_models.md)).
 
 Simulations compile the model the same way: `spkmd` with
 `calculator.compile_model=True`, the ASE `SpkCalculator` with `compile_model=True`

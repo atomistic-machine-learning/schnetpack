@@ -117,6 +117,7 @@ tutorials/materials
 :caption: Guides
 
 guides/configs
+guides/saving_models
 guides/training_speed
 guides/md_cli
 guides/batchwise_relaxations

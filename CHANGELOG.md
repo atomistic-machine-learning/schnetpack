@@ -100,9 +100,11 @@ e.g. `schnetpack.representation.PaiNN` → `schnetpack.model.PaiNN`, and
 `schnetpack.data.AtomsDataModule` → `schnetpack.lightning.AtomsDataModule`.
 
 **Saved models.** Models pickled by 2.x store the old module paths. Load them
-with `schnetpack.utils.load_model(path)`, which maps those paths onto the new
-ones. A plain `torch.load` fails with `ModuleNotFoundError`. Models deployed for
-LAMMPS with `spkdeploy` are unchanged.
+with `schnetpack.load_model(path)` or `schnetpack.utils.load_model(path)`, which
+map those paths onto the new ones. A plain `torch.load` fails with
+`ModuleNotFoundError`. A pickled model cannot be saved in the new format of 3.0
+(see Added); build the same model in Python, load its `state_dict` and save
+that. Models deployed for LAMMPS with `spkdeploy` are unchanged.
 
 ### Added
 
@@ -110,8 +112,16 @@ LAMMPS with `spkdeploy` are unchanged.
   masks `LossMask` and `AtomMask`, and the functions `extract_targets` and
   `calculate_loss`. `predict_without_postprocessing` runs a model with its
   postprocessing switched off.
-- `schnetpack.lightning`: `AtomisticTask`, `AtomsDataModule`, the callbacks,
-  and `load_task_from_checkpoint`.
+- `schnetpack.lightning`: `AtomisticTask`, `AtomsDataModule` and the callbacks.
+- A model format without pickle. `schnetpack.save_model(model, path)` writes a
+  folder with `hyperparameters.json` (the classes and constructor arguments of
+  the model, plain JSON) and `model.safetensors` (the weights);
+  `schnetpack.load_model(path)` builds the model from it with its own table of
+  classes, runs no code from the files and needs no Hydra;
+  `schnetpack.load_hyperparameters(path)` reads the JSON. `@schnetpack.register`
+  makes a class of one's own savable. `spk train` stores `best_model/` this way,
+  with a generative model's `generative:` and `sample:` settings. See the guide
+  "Saving and loading models".
 - `schnetpack.dynamics`:
   - Optimizers: `LBFGS` (one inverse-Hessian approximation per structure, so
     structures of different size relax in one batch), `GradientDescent` and
@@ -177,6 +187,15 @@ LAMMPS with `spkdeploy` are unchanged.
   and the virial, and runs only with the torch version and on the device it was
   built for, so it is built on the machine LAMMPS runs on. The LAMMPS pair
   style is being rewritten to load it.
+- `spk train` writes the best model as the folder `best_model/`, no longer as
+  the pickled files `best_model` and `best_model.task`. Lightning checkpoints
+  hold the weights and the training state, no pickled model, outputs or
+  optimizer class, and load with `weights_only=True`; runs written before
+  cannot be resumed or tested.
+- `AddOffsets` and `RemoveOffsets` keep the size of the atom reference table
+  they were built with (`zmax`, 100 by default): atom references from the data
+  are padded with zeros, and non-zero entries beyond it raise an error.
+- New dependency: `safetensors`.
 - Optional dependency extras: `test`, `dev`, `doc` and `mace`. `black`,
   `pytest`, `pre-commit`, `protobuf` and `progressbar` are no longer installed
   as runtime dependencies.
@@ -255,6 +274,10 @@ LAMMPS with `spkdeploy` are unchanged.
 
 - `schnetpack.atomistic` and `schnetpack.representation`, merged into
   `schnetpack.model`.
+- `lightning.utils.load_task_from_checkpoint` and
+  `trainer_fit_kwargs_for_checkpoint`: a checkpoint no longer holds the model.
+  Build the task from the run's config and load the checkpoint's `state_dict`,
+  as `spk test` does.
 - `BaseAtomsData`, `AtomsDataFormat`, `resolve_format`, `create_dataset`,
   `load_dataset` and `AtomsDataModuleError`. `ASEAtomsData` is the only
   dataset backend.

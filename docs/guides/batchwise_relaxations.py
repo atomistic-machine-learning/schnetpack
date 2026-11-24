@@ -15,7 +15,6 @@ import schnetpack as spk
 from schnetpack import properties
 from schnetpack.dynamics import ForceCalculator
 from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
-from schnetpack.utils.compatibility import load_model
 
 # %% [markdown]
 # First, we load the force field model that provides the forces for the relaxation process. Furthermore, we define the atoms converter, which is used to convert ase Atoms objects to SchNetPack input.
@@ -29,7 +28,7 @@ model_path = "../../tests/testdata/md_ethanol.model"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # load model
-model = load_model(model_path, device=device)
+model = spk.load_model(model_path, device=device)
 
 cutoff = model.representation.cutoff.item()
 CUTOFF_SKIN = 0.3  # Ang

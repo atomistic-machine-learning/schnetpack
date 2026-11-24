@@ -25,3 +25,17 @@ Units
     :nosignatures:
 
     units.convert_units
+
+Saving and loading models
+-------------------------
+A model folder holds ``hyperparameters.json`` and ``model.safetensors``; see
+:doc:`/guides/saving_models`.
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    save_model
+    load_model
+    load_hyperparameters
+    register

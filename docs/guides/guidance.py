@@ -18,7 +18,6 @@ import schnetpack as spk
 from schnetpack import properties
 from schnetpack.dynamics import LBFGS, ForceCalculator, HarmonicRestraint
 from schnetpack.interfaces.ase_interface import atoms_to_batch
-from schnetpack.utils.compatibility import load_model
 
 # %% [markdown]
 # We load the force field model and build a relaxer around it. The calculator evaluates the whole batch in one model call; the `ForceCalculator` converts the model's kcal/mol to eV, so the optimizer, `FMAX` and the restraint all work in eV and Angstrom.
@@ -30,7 +29,7 @@ model_path = "../../tests/testdata/md_ethanol.model"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # load model
-model = load_model(model_path, device=device)
+model = spk.load_model(model_path, device=device)
 cutoff = model.representation.cutoff.item()
 CUTOFF_SKIN = 0.3  # Ang
 

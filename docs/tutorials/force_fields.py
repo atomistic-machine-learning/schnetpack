@@ -269,7 +269,8 @@ print(f"energy MAE: {trainer.callback_metrics['test_energy_MAE']:.4f} eV")
 print(f"force MAE:  {trainer.callback_metrics['test_forces_MAE']:.4f} eV/Å")
 
 # %% [markdown]
-# For a closer look, we load the saved model with `spk.load_model` and predict the
+# For a closer look, we load the saved model with
+# {func}`spk.load_model <schnetpack.load_model>` and predict the
 # forces of the test set batch by batch. The model writes its predictions into the
 # batch, so the reference forces are taken out first.
 
