@@ -140,6 +140,15 @@ that. Models deployed for LAMMPS with `spkdeploy` are unchanged.
   - Couplings (OT, permutation, PC-variance).
   - Parametrizations (eps, x0, score, velocity, pseudo-force) and `MatchingLoss`.
   - Priors, and the `Diffuse` transform, which noises inside the dataloader.
+  - Metrics of generated structures (`schnetpack.generative.validation`).
+    Molecules: validity, uniqueness, novelty and similarity from RDKit SMILES,
+    and the PoseBusters checks. Crystals, after MatterGen: structural and
+    compositional validity, uniqueness, novelty, the energy above the convex
+    hull and the RMSD of a relaxation.
+  - `spk evaluate dbs=<db>` scores a db of samples with them: validity and
+    uniqueness of molecules; validity, uniqueness and novelty (`known=`) of
+    crystals. With `calculator=` the crystals are relaxed first, cell and
+    positions, with the batched `LBFGS`, and `hull=` adds their stability.
 - `schnetpack.uncertainty`: ensemble disagreement per structure
   (`AbsoluteUncertainty`, `RelativeUncertainty`), shared by the ASE and dynamics
   ensembles. `schnetpack.model.NNEnsemble` evaluates several models together.
@@ -204,7 +213,9 @@ that. Models deployed for LAMMPS with `spkdeploy` are unchanged.
   they were built with (`zmax`, 100 by default): atom references from the data
   are padded with zeros, and non-zero entries beyond it raise an error.
 - New dependency: `safetensors`.
-- Optional dependency extras: `test`, `dev`, `doc` and `mace`. `black`,
+- Optional dependency extras: `test`, `dev`, `doc`, `mace`, `compile`, `rdkit`
+  (metrics of generated molecules), `crystals` (metrics of generated crystals:
+  pymatgen and smact 4) and `all`. `black`,
   `pytest`, `pre-commit`, `protobuf` and `progressbar` are no longer installed
   as runtime dependencies.
 - Raised minimum versions: `ase>=3.23`, `hydra-core>=1.3,<2`,
