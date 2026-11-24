@@ -41,3 +41,4 @@ Build, export and fine-tune MACE models. Needs the ``mace`` extra
     build_mace
     export_mace
     export_mace_off
+    export_mace_mp

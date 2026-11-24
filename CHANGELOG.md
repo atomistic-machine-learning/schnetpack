@@ -148,6 +148,11 @@ that. Models deployed for LAMMPS with `spkdeploy` are unchanged.
 - MACE:
   - `schnetpack.model.MaceModel`, which runs MACE on SchNetPack batches.
   - `load_mace`, and `ExportedMace` for models compiled with `torch.export`.
+  - `MaceModel(stress_key=...)` also returns the stress, so MACE can relax the
+    cell of a crystal, e.g. through `SpkCalculator(stress_key=...)`.
+  - `export_mace`, `export_mace_off` and `export_mace_mp` in
+    `schnetpack.interfaces.mace_interface` compile a MACE model; the latter two
+    download MACE-OFF23 and MACE-MP first and cache the compiled model.
   - Fine-tuning via `experiment=mace_finetune`.
   - Compiling MACE models needs the new `mace` extra
     (`pip install schnetpack[mace]`). Loading a compiled model does not.
