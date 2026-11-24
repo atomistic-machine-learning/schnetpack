@@ -20,10 +20,10 @@ class LBFGSState:
 
     Attributes:
         n_structures: structures in the batch
-        idx_m: ``(n_total_atoms,)`` structure of every atom, on the
-            recursion's device
-        s: position differences of the last steps, each
-            ``(n_total_atoms, 3)``
+        idx_m: ``(n_rows,)`` structure of every row (the atoms, and with
+            ``relax_cell`` three cell rows per structure), on the recursion's
+            device
+        s: position differences of the last steps, each ``(n_rows, 3)``
         y: gradient differences of the last steps, shaped like ``s``
         rho: ``1 / (y . s)`` per structure, ``(n_structures,)`` each
         x0: positions of the previous step
@@ -50,7 +50,9 @@ class LBFGS(Optimizer):
     structure, so structures of different sizes and compositions relax
     together exactly as they would alone. The recursion runs on the batch's
     own layout, the atoms of every structure end to end, and reduces per
-    structure over ``idx_m``. The step length is set by ``maxstep`` and
+    structure over ``idx_m``. With ``relax_cell`` each structure's three cell
+    rows join its atoms in the recursion, as under ase's
+    ``FrechetCellFilter``. The step length is set by ``maxstep`` and
     ``damping``; the loop, the stop test and the holding of converged
     structures and fixed atoms are :class:`~schnetpack.dynamics.optimize.Optimizer`'s.
 
@@ -78,6 +80,7 @@ class LBFGS(Optimizer):
         prior: Prior | None = None,
         hooks: Sequence = (),
         key: str = properties.R,
+        relax_cell: bool = False,
     ):
         """
         Args:
@@ -86,7 +89,9 @@ class LBFGS(Optimizer):
                 (eV/Angstrom, or Angstrom for a pseudo-force); None runs all
                 ``n_steps``
             maxstep: how far a single atom may move in one step, in Angstrom.
-                Each structure is rescaled on its own.
+                Each structure is rescaled on its own. A cell row counts as
+                an atom: the logarithm of the deformation changes by at most
+                ``maxstep / n_atoms`` per row.
             memory: steps of history kept for the two-loop recursion
             damping: the computed step is multiplied by this before it is
                 taken
@@ -103,6 +108,7 @@ class LBFGS(Optimizer):
             prior: see :class:`~schnetpack.dynamics.optimize.Optimizer`
             hooks: see :class:`~schnetpack.dynamics.optimize.Optimizer`
             key: see :class:`~schnetpack.dynamics.optimize.Optimizer`
+            relax_cell: see :class:`~schnetpack.dynamics.optimize.Optimizer`
         """
         if maxstep > 1.0:
             raise ValueError(
@@ -116,6 +122,7 @@ class LBFGS(Optimizer):
             hooks=hooks,
             key=key,
             fmax=fmax,
+            relax_cell=relax_cell,
         )
         if alpha is None:
             alpha = 70.0 if self.calculator.physical else 2.0
@@ -125,11 +132,11 @@ class LBFGS(Optimizer):
         self.H0 = 1.0 / alpha  # initial inverse Hessian
         self.device = torch.device(device)
 
-    def init_state(self, batch, x) -> LBFGSState:
+    def init_state(self, batch, idx_m) -> LBFGSState:
         # the layout is fixed for a run: read it once, not on every step
         return LBFGSState(
             n_structures=batch[properties.n_atoms].shape[0],
-            idx_m=batch[properties.idx_m].to(self.device),
+            idx_m=idx_m.to(self.device),
         )
 
     def step(self, batch, x, forces, state):

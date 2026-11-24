@@ -268,26 +268,27 @@ def test_cached_forces_are_dropped_when_the_positions_move(initial_structures):
 
 
 class EMTModel:
-    """ase's EMT as a bare model on a batch: energies in eV, forces in eV/Ang."""
+    """ase's EMT as a bare model on a batch: energies in eV, forces in eV/Ang, and
+    with ``stress`` the stress of periodic structures in eV/Ang^3."""
+
+    def __init__(self, stress: bool = False):
+        self.stress = stress
 
     def __call__(self, inputs):
-        sizes = inputs[properties.n_atoms].tolist()
-        positions = inputs[properties.R]
-        energies, forces = [], []
-        for numbers, structure_positions in zip(
-            inputs[properties.Z].split(sizes), positions.split(sizes)
-        ):
-            structure = Atoms(
-                numbers=numbers.tolist(),
-                positions=structure_positions.detach().cpu().numpy(),
-            )
+        outputs = {"energy": [], "forces": [], "stress": []}
+        for structure in batch_to_atoms(inputs):
             structure.calc = EMT()
-            energies.append(structure.get_potential_energy())
-            forces.append(structure.get_forces())
-        like = {"dtype": positions.dtype, "device": positions.device}
+            outputs["energy"].append([structure.get_potential_energy()])
+            outputs["forces"].append(structure.get_forces())
+            if self.stress:
+                outputs["stress"].append(structure.get_stress(voigt=False)[None])
+        positions = inputs[properties.R]
         return {
-            "energy": torch.tensor(energies, **like),
-            "forces": torch.tensor(np.concatenate(forces), **like),
+            key: torch.tensor(
+                np.concatenate(value), dtype=positions.dtype, device=positions.device
+            )
+            for key, value in outputs.items()
+            if value
         }
 
 

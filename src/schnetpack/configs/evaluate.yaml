@@ -14,12 +14,14 @@ timeout: 5  # seconds per molecule
 # crystals
 known: null  # ASE db of known crystals, for the novelty
 split: null  # a run's split file: only the train and val rows of `known` count
-# an ASE calculator with a stress that relaxes the crystals, as a Hydra target:
-#   'calculator={_target_: ase.calculators.emt.EMT}'
-#   'calculator={_target_: schnetpack.interfaces.ase_interface.SpkCalculator, model: <model>, neighbor_list: {_target_: schnetpack.transform.MatScipyNeighborList, cutoff: 5.0}, stress_key: stress, energy_unit: eV}'
+# a ForceCalculator with a stress_key, as a Hydra target: its model relaxes the
+# crystals, cell and positions, batch_size at a time (LBFGS with relax_cell). A model
+# folder is loaded in float64:
+#   'calculator={_target_: schnetpack.dynamics.ForceCalculator, model: <model folder>, stress_key: stress, device: cuda, neighbor_list: {_target_: schnetpack.dynamics.BatchNeighborList, neighbor_list: {_target_: schnetpack.transform.MatScipyNeighborList, cutoff: 6.0}}}'
 calculator: null
-fmax: 0.05  # eV/A: the relaxation ends when the largest force is below
-steps: 500  # or after this many steps
+batch_size: 256  # crystals relaxed together
+fmax: 0.05  # eV/A: a crystal is relaxed when its largest force, cell included, is below
+steps: 500  # the step limit of a batch
 hull: null  # ASE db of reference phases; energies from the calculator's level of theory
 hull_energy: energy  # the name of the total energy (eV) in the hull db
 stable_below: 0.1  # eV per atom above the hull

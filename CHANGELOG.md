@@ -125,7 +125,10 @@ that. Models deployed for LAMMPS with `spkdeploy` are unchanged.
 - `schnetpack.dynamics`:
   - Optimizers: `LBFGS` (one inverse-Hessian approximation per structure, so
     structures of different size relax in one batch), `GradientDescent` and
-    GPFF's `DirectDenoising`.
+    GPFF's `DirectDenoising`. With `relax_cell=True`, `LBFGS` and
+    `GradientDescent` relax the cell together with the positions, from the
+    stress of a `ForceCalculator(stress_key=...)`, as ASE's
+    `FrechetCellFilter` does for one structure.
   - `Sampler`, with SDE, ODE and ancestral updates on a time grid.
   - Force, score, velocity, noise and x0 calculators.
   - Hooks such as `FreezeScaffold`, and guidance terms such as

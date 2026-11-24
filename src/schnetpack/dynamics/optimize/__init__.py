@@ -5,6 +5,8 @@ The time-free family: step structures along a force until they are relaxed.
   with its stop test and holding, and :class:`GradientDescent`.
 - :mod:`~schnetpack.dynamics.optimize.lbfgs`: :class:`LBFGS`, batch-wise
   quasi-Newton relaxation.
+- :mod:`~schnetpack.dynamics.optimize.cell`: the cell as three more rows of
+  the variables, for ``relax_cell``.
 - :mod:`~schnetpack.dynamics.optimize.direct_denoising`: GPFF's
   :class:`DirectDenoising` on a pseudo-force.
 """

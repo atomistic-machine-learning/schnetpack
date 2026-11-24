@@ -316,6 +316,15 @@ class ForceCalculator(Calculator):
             raise TypeError("a pseudo-force has no energy behind it")
         return self(batch)[self.energy_key]
 
+    def stress(self, batch: Mapping[str, Any]) -> torch.Tensor:
+        """
+        The stress per structure at ``batch``, ``(n_structures, 3, 3)`` in
+        eV/Angstrom^3 and positive under tension. Needs a ``stress_key``.
+        """
+        if self.stress_key is None:
+            raise TypeError("the calculator has no stress_key to read a stress from")
+        return self(batch)[self.stress_key].view(-1, 3, 3)
+
     def _evaluate(self, batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
         if self.position_conversion != 1.0:
             batch = {

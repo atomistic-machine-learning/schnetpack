@@ -13,19 +13,23 @@ Molecules (a db without a periodic cell): validity and uniqueness. Needs RDKit
 (``pip install schnetpack[rdkit]``).
 
 Crystals: structural and compositional validity, uniqueness, and the novelty against
-the crystals of ``known``. With a ``calculator`` -- any ASE calculator that returns
-a stress, written as a Hydra target -- every structurally valid crystal is relaxed,
-cell and positions; uniqueness and novelty are then those of the relaxed crystals,
-which go to ``relaxed/<db name>.db`` with their energies before and after. With a
-``hull`` db of reference phases, whose energies are from the calculator's level of
-theory, the energy above the convex hull, the stable share and S.U.N. (stable,
-unique and novel) are added::
+the crystals of ``known``. With a ``calculator`` -- a
+:class:`~schnetpack.dynamics.ForceCalculator` with a ``stress_key``, written as a
+Hydra target, around any model that returns energy, forces and stress for a batch --
+the structurally valid crystals are relaxed, cell and positions, ``batch_size`` at a
+time (:class:`~schnetpack.dynamics.LBFGS` with ``relax_cell``); uniqueness and novelty
+are then those of the relaxed crystals, which go to ``relaxed/<db name>.db`` with
+their energies before and after. With a ``hull`` db of reference phases, whose
+energies are from the calculator's level of theory, the energy above the convex hull,
+the stable share and S.U.N. (stable, unique and novel) are added::
 
-    spk evaluate dbs=samples.db known=mp20.db split=<run>/split.npz \\
-        'calculator={_target_: ase.calculators.emt.EMT}' hull=reference.db
+    spk evaluate dbs=samples.db known=mp20.db split=<run>/split.npz hull=reference.db \\
+        'calculator={_target_: schnetpack.dynamics.ForceCalculator, model: <model folder>, stress_key: stress}'
 
-Every share is of all crystals of the db: one that is structurally invalid, or whose
-relaxation fails, counts as neither unique, novel nor stable. Needs pymatgen and
+(``configs/evaluate.yaml`` has the line with a neighbor list and a device.)
+
+Every share is of all crystals of the db: one that is structurally invalid, before or
+after its relaxation, counts as neither unique, novel nor stable. Needs pymatgen and
 smact (``pip install schnetpack[crystals]``).
 """
 
@@ -38,10 +42,12 @@ from itertools import tee
 
 import hydra
 import numpy as np
+import torch
 from ase import Atoms
 from ase.db import connect
 from omegaconf import DictConfig
 
+from schnetpack import properties
 from schnetpack.generative.validation import (
     composition_valid,
     energy_above_hull,
@@ -138,21 +144,21 @@ def _crystals(
     if calculator is not None:
         before, rmsd = np.full(n, np.nan), np.full(n, np.nan)
         converged = np.zeros(n, dtype=bool)
-        for i in np.flatnonzero(structure):
-            try:
-                relaxed, e_generated, e_relaxed, done = _relax(
-                    generated[i], calculator, config.fmax, config.steps
-                )
-            except Exception as error:  # e.g. an element the calculator lacks
-                print(f"{path}: crystal {i} not relaxed: {error!r}")
+        valid = np.flatnonzero(structure)
+        relaxed, e_generated, e_relaxed, done = _relax(
+            [generated[i] for i in valid],
+            calculator,
+            config.fmax,
+            config.steps,
+            config.batch_size,
+        )
+        for j, i in enumerate(valid):
+            if not structure_valid(relaxed[j]):  # also one the model sent to NaN
                 scored[i] = None
                 continue
-            if not structure_valid(relaxed):
-                scored[i] = None
-                continue
-            scored[i] = relaxed
-            before[i], energies[i], converged[i] = e_generated, e_relaxed, done
-            rmsd[i] = relaxation_rmsd(generated[i], relaxed)
+            scored[i] = relaxed[j]
+            before[i], energies[i], converged[i] = e_generated[j], e_relaxed[j], done[j]
+            rmsd[i] = relaxation_rmsd(generated[i], relaxed[j])
         _write_relaxed(path, scored, before, energies, converged)
         n_atoms = np.array([len(atoms) for atoms in generated])
         relaxed = np.isfinite(energies)
@@ -193,20 +199,36 @@ def _crystals(
     return result
 
 
-def _relax(atoms: Atoms, calculator, fmax: float, steps: int):
-    """The crystal relaxed with ``calculator``, cell and positions (FIRE on ASE's
-    ``FrechetCellFilter``), its energy before and after, and whether the largest
-    force fell below ``fmax`` within ``steps`` steps."""
-    from ase.filters import FrechetCellFilter
-    from ase.optimize import FIRE
+def _relax(crystals: list[Atoms], calculator, fmax: float, steps: int, batch_size: int):
+    """The crystals relaxed with ``calculator``, cell and positions, ``batch_size`` at
+    a time; their energies before and after, in eV; and which are converged: at the
+    relaxed crystal the largest force on an atom, and on the cell (a row of the
+    virial over the number of atoms), is below ``fmax``."""
+    from schnetpack.dynamics import LBFGS
+    from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
 
-    relaxed = atoms.copy()
-    relaxed.calc = calculator
-    before = relaxed.get_potential_energy()
-    converged = FIRE(FrechetCellFilter(relaxed), logfile=None).run(fmax, steps)
-    after = relaxed.get_potential_energy()
-    relaxed.calc = None
-    return relaxed, float(before), float(after), bool(converged)
+    relaxer = LBFGS(calculator, fmax=fmax, relax_cell=True)
+    calculator = relaxer.calculator
+    relaxed, before, after, converged = [], [], [], []
+    for start in range(0, len(crystals), batch_size):
+        batch = atoms_to_batch(
+            crystals[start : start + batch_size], dtype=torch.float64
+        )
+        batch = calculator.prepare(batch)
+        calculator.reset()  # the neighbor lists of the batch before
+        before += calculator.energy(batch).flatten().tolist()
+        batch = relaxer.run(batch, steps)
+        after += calculator.energy(batch).flatten().tolist()
+        n_atoms = batch[properties.n_atoms]
+        volume = torch.linalg.det(batch[properties.cell].view(-1, 3, 3)).abs()
+        on_cell = calculator.stress(batch) * (volume / n_atoms)[:, None, None]
+        largest = on_cell.norm(dim=-1).amax(dim=-1)
+        largest = largest.scatter_reduce(
+            0, batch[properties.idx_m], calculator.forces(batch).norm(dim=-1), "amax"
+        )
+        converged += (largest < fmax).tolist()
+        relaxed += batch_to_atoms(batch)
+    return relaxed, before, after, converged
 
 
 def _write_relaxed(path: str, scored, before, energies, converged):

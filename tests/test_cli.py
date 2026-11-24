@@ -103,13 +103,17 @@ task:
 """
 
 
-def spk(*args, cwd, check=True):
-    """`spk <args>` in its own process."""
+def spk(*args, cwd, check=True, pythonpath=None):
+    """`spk <args>` in its own process; ``pythonpath`` is a folder it can import from."""
+    env = dict(os.environ)
+    if pythonpath is not None:
+        env["PYTHONPATH"] = pythonpath
     result = subprocess.run(
         [sys.executable, "-c", "from schnetpack.cli import main; main()", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
+        env=env,
     )
     if check:
         assert result.returncode == 0, result.stderr[-3000:]
@@ -358,13 +362,14 @@ def test_spk_evaluate_relaxes_crystals_with_the_calculator_it_is_given(tmp_path)
             db.write(atoms)
         db.write(alloy())
         db.write(close)  # structurally invalid
-        db.write(bulk("Si", cubic=True))  # EMT has no silicon: not relaxed
+        db.write(bulk("Al", cubic=True, a=4.2))
     with connect(tmp_path / "known.db") as db:
         db.write(bulk("Cu", a=3.6))  # row 0, train
         db.write(alloy())  # row 1, test
-    np.savez(tmp_path / "split.npz", train_idx=[0], val_idx=[], test_idx=[1])
+        db.write(bulk("Al", a=4.05))  # row 2, val
+    np.savez(tmp_path / "split.npz", train_idx=[0], val_idx=[2], test_idx=[1])
     with connect(tmp_path / "hull.db") as db:
-        for atoms in (bulk("Cu", a=3.6), bulk("Au", a=4.08), bulk("Cu", a=3.9)):
+        for atoms in (bulk("Cu", a=3.6), bulk("Au", a=4.08), bulk("Al", a=4.05)):
             atoms.calc = EMT()
             energy = atoms.get_potential_energy()
             atoms.calc = None
@@ -374,30 +379,38 @@ def test_spk_evaluate_relaxes_crystals_with_the_calculator_it_is_given(tmp_path)
     result = json.loads((tmp_path / "eval.json").read_text())["samples"]
     assert result["scored"] == "generated"
     assert (result["structure_validity"], result["composition_validity"]) == (0.8, 1.0)
-    assert result["uniqueness"] == 0.6  # copper once, the alloy, silicon
+    assert result["uniqueness"] == 0.6  # copper once, the alloy, aluminium
     assert "novelty" not in result and "stability" not in result
 
+    # ase's EMT as the model of a ForceCalculator; two crystals per batch
+    emt = "tests.dynamics.relax.test_relaxer_vs_ase.EMTModel"
     spk(
         "evaluate",
         "dbs=samples.db",
         "known=known.db",
         "split=split.npz",
-        "calculator={_target_: ase.calculators.emt.EMT}",
+        "calculator={_target_: schnetpack.dynamics.ForceCalculator, "
+        f"model: {{_target_: {emt}, stress: true}}, stress_key: stress}}",
+        "batch_size=2",
         "hull=hull.db",
         cwd=tmp_path,
+        pythonpath=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
     result = json.loads((tmp_path / "eval.json").read_text())["samples"]
     assert result["scored"] == "relaxed"
-    assert (result["n_relaxed"], result["n_converged"]) == (3, 3)
+    assert (result["n_relaxed"], result["n_converged"]) == (4, 4)
     assert result["energy_change"] < 0
-    assert result["uniqueness"] == 0.4  # copper once and the alloy
+    assert result["uniqueness"] == 0.6  # copper once, the alloy, aluminium
     assert result["novelty"] == 0.2  # the alloy: its known copy is a test crystal
-    assert result["stability"] == 0.6
+    assert result["stability"] == 0.8
     assert result["sun"] == 0.2
     with connect(tmp_path / "relaxed" / "samples.db") as db:
         rows = list(db.select())
-    assert [row.generated_id for row in rows] == [1, 2, 3]
+    assert [row.generated_id for row in rows] == [1, 2, 3, 5]
+    assert all(row.converged for row in rows)
     assert all(row.data["energy"] < row.data["energy_generated"] for row in rows)
+    # relaxed with EMT: its own lattice constant of copper, to the stop test
+    assert rows[0].toatoms().cell.lengths() == pytest.approx([3.59] * 3, abs=0.01)
 
     assert (
         spk("evaluate", "dbs=samples.db", "hull=hull.db", cwd=tmp_path, check=False)
