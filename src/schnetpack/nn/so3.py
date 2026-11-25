@@ -18,6 +18,7 @@ from .ops.so3_message import so3_message, so3_message_pairs, so3_message_support
 
 __all__ = [
     "RealSphericalHarmonics",
+    "rsh_l2_to_matrix",
     "SO3TensorProduct",
     "SO3Convolution",
     "SO3GatedNonlinearity",
@@ -190,6 +191,33 @@ def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
         dim=1,
     )
     return y
+
+
+def rsh_l2_to_matrix(x: torch.Tensor) -> torch.Tensor:
+    """
+    The symmetric traceless 3x3 matrices of l=2 real spherical harmonics components.
+
+    Rotating the components rotates the matrix T as R T R^T, and the Frobenius norm
+    of T is the norm of the components. For the harmonics of a unit vector r,
+    T is proportional to r r^T - 1/3.
+
+    Args:
+        x: components in the order of :class:`RealSphericalHarmonics`,
+            m = -2 ... 2 (xy, yz, 3z^2 - r^2, xz, x^2 - y^2), shape [*, 5]
+
+    Returns:
+        matrices of shape [*, 3, 3]
+    """
+    xy, yz, zz, xz, xx_yy = (x * math.sqrt(0.5)).unbind(-1)
+    zz = zz / math.sqrt(3.0)
+    return torch.stack(
+        [
+            torch.stack([xx_yy - zz, xy, xz], dim=-1),
+            torch.stack([xy, -xx_yy - zz, yz], dim=-1),
+            torch.stack([xz, yz, 2.0 * zz], dim=-1),
+        ],
+        dim=-2,
+    )
 
 
 @register

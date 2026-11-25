@@ -35,3 +35,16 @@ def test_so3net_tensors_follow_the_model():
                 assert v.device == meta, (
                     f"{type(m).__name__} holds a tensor .to() missed"
                 )
+
+
+def test_l2_harmonics_of_a_direction_give_its_traceless_outer_product():
+    from schnetpack.nn.so3 import RealSphericalHarmonics, rsh_l2_to_matrix
+
+    torch.manual_seed(0)
+    r = torch.nn.functional.normalize(torch.randn(50, 3, dtype=torch.float64), dim=1)
+    x = RealSphericalHarmonics(2, "float64")(r)[:, 4:9]
+    matrix = rsh_l2_to_matrix(x)
+    expected = r[:, :, None] * r[:, None, :] - torch.eye(3, dtype=r.dtype) / 3
+    scale = matrix[0, 0, 0] / expected[0, 0, 0]
+    torch.testing.assert_close(matrix, scale * expected)
+    torch.testing.assert_close(matrix.flatten(1).norm(dim=1), x.norm(dim=1))

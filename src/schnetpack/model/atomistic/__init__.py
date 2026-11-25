@@ -6,3 +6,4 @@ from .electrostatic import *
 from .external_fields import *
 from .nuclear_repulsion import *
 from .response import *
+from .tensor import *
