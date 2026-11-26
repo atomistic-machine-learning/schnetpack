@@ -116,3 +116,5 @@ def test_stress_mixed_cell_handedness(response_cls):
     ).reshape(4, 3)
     torch.testing.assert_close(result[spk.properties.stress], expected_stress)
     torch.testing.assert_close(result[spk.properties.forces], expected_forces)
+    # torchmetrics flattens predictions with view(-1)
+    assert result[spk.properties.stress].is_contiguous()

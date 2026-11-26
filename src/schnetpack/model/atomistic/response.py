@@ -88,7 +88,8 @@ class Forces(nn.Module):
                 dim=1,
                 keepdim=True,
             )[:, :, None].abs()
-            inputs[self.stress_key] = stress / volume
+            # contiguous: the gradient through the transpose in Strain is a transposed view
+            inputs[self.stress_key] = (stress / volume).contiguous()
 
         return inputs
 
@@ -220,7 +221,7 @@ class Response(nn.Module):
                 dim=1,
                 keepdim=True,
             )[:, :, None].abs()
-            results[properties.stress] = stress / volume
+            results[properties.stress] = (stress / volume).contiguous()
 
         # ================================
         # dE / dF
