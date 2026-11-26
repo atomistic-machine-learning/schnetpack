@@ -128,7 +128,12 @@ class CompiledPotential:
 
     def _trace(self, params, buffers, inputs):
         def forward(params, buffers, inputs):
-            return functional_call(self.model, (params, buffers), (dict(inputs),))
+            # tie_weights=False: a module used twice (shared interactions) has one
+            # name per tensor here; untying would swap it twice and restore the
+            # traced tensor instead of the parameter
+            return functional_call(
+                self.model, (params, buffers), (dict(inputs),), tie_weights=False
+            )
 
         # sizes 0 and 1 are part of the graph key, as trace() specializes on them
         derivatives = self.model.required_derivatives or []

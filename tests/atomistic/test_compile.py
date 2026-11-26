@@ -25,10 +25,11 @@ CUTOFF = 3.0
 REPRESENTATIONS = [spk.model.SchNet, spk.model.PaiNN, spk.model.SO3net]
 
 
-def potential(representation, stress=False):
+def potential(representation, stress=False, shared=False):
     kwargs = dict(
         n_atom_basis=16,
         n_interactions=2,
+        shared_interactions=shared,
         radial_basis=spk.nn.GaussianRBF(n_rbf=10, cutoff=CUTOFF),
         cutoff_fn=spk.nn.CosineCutoff(CUTOFF),
     )
@@ -122,6 +123,20 @@ def test_compiled_potential_matches_eager(representation):
     )
     # one graph per mode, reused across batch sizes
     assert len(compiled._graphs) == 2
+
+
+@requires_compile
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_compiled_potential_with_shared_interactions_matches_eager(representation):
+    """Tracing leaves the parameters of the module that is used twice in place."""
+    torch.manual_seed(0)
+    model = potential(representation, shared=True)
+    compiled = spk.model.CompiledPotential(model)
+    batches = [molecules((5, 7)), molecules((4, 6, 8), seed=1)]
+
+    assert_matches_eager(
+        model, compiled, batches, (properties.energy, properties.forces)
+    )
 
 
 @requires_compile
