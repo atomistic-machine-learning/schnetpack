@@ -11,7 +11,7 @@ from schnetpack.model_format import register
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.blocks import ResidualMLP
 
-__all__ = ["NuclearEmbedding", "ElectronicEmbedding"]
+__all__ = ["NuclearEmbedding", "ElectronicEmbedding", "ConditionEmbedding"]
 
 
 """
@@ -351,3 +351,60 @@ class ElectronicEmbedding(nn.Module):
             anorm = torch.gather(anorm, 0, idx_m)
         # return probability distribution of scaled normalized attention weights, eps is added for numerical stability (sum / batchsize equals 1)
         return self.resblock((a / (anorm + self.epsilon)).unsqueeze(-1) * v)
+
+
+@register
+class ConditionEmbedding(nn.Module):
+    """
+    Embeds a property a model is conditioned on, one scalar per structure, e.g.
+    the HOMO-LUMO gap a generated molecule should have.
+
+    The standardized value and a flag that says whether it is given go through
+    one linear layer, and the result is added to the embedding of every atom of
+    the structure: the condition appended to the atom embedding and mapped back
+    to its width, as EDM appends its context to the node features.
+
+    NaN stands for no condition: the value enters as 0 with the flag 0.
+    :class:`~schnetpack.generative.DropCondition` writes it for a share of the
+    training structures, so that one model learns the conditional and the
+    unconditional field, which classifier-free guidance combines
+    (:class:`~schnetpack.dynamics.FieldCalculator`).
+
+    Passed to a representation among its ``electronic_embeddings``.
+    """
+
+    def __init__(
+        self,
+        property_key: str,
+        num_features: int,
+        mean: float = 0.0,
+        std: float = 1.0,
+    ):
+        """
+        Args:
+            property_key: key of the condition in the spk 'inputs' dictionary,
+                one value per structure
+            num_features: dimension of the atom embedding
+            mean: mean of the condition over the training data
+            std: its standard deviation
+        """
+        super().__init__()
+        self.property_key = property_key
+        self.mean = mean
+        self.std = std
+        self.linear = nn.Linear(2, num_features)
+
+    def forward(self, input_embedding, inputs) -> torch.Tensor:
+        """
+        Args:
+            input_embedding: embedding of the nuclear charges (not read)
+            inputs: spk style input dictionary
+
+        Returns:
+            What is added to the embedding, shape (n_atoms, num_features).
+        """
+        value = inputs[self.property_key].reshape(-1, 1)
+        given = ~torch.isnan(value)
+        value = torch.where(given, (value - self.mean) / self.std, 0.0)
+        condition = torch.cat([value, given.to(value.dtype)], dim=-1)
+        return self.linear(condition)[inputs[properties.idx_m]]
