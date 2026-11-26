@@ -361,3 +361,91 @@ def test_a_pseudo_force_has_no_energy_and_no_stress():
         ForceCalculator(zero_model, kind="pseudo", stress_key="stress")
     with pytest.raises(ValueError, match="kind"):
         ForceCalculator(zero_model, kind="virtual")
+
+
+# ------------------------------------------------------------------ classifier-free guidance
+
+
+class ConditionalModel:
+    """eps = gap * R with a condition and -R without one, per atom."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, batch):
+        self.calls += 1
+        gap = batch["gap"][batch[properties.idx_m], None]
+        positions = batch[properties.R]
+        eps = torch.where(torch.isnan(gap), -positions, gap * positions)
+        return {"eps_pred": eps}
+
+
+def conditioned_batch():
+    n_atoms = torch.tensor([2, 3])
+    return {
+        properties.R: torch.randn(5, 3),
+        properties.n_atoms: n_atoms,
+        properties.idx_m: torch.repeat_interleave(torch.arange(2), n_atoms),
+        "gap": torch.tensor([2.0, 5.0]),
+    }
+
+
+def test_cfg_combines_the_conditional_and_the_unconditional_heads():
+    torch.manual_seed(0)
+    batch = conditioned_batch()
+    model = ConditionalModel()
+    calculator = FieldCalculator(model, cfg_scale=1.5, condition_keys=["gap"])
+
+    eps = calculator(batch)["eps_pred"]
+
+    positions = batch[properties.R]
+    conditional = batch["gap"][batch[properties.idx_m], None] * positions
+    torch.testing.assert_close(eps, 2.5 * conditional + 1.5 * positions)
+    assert model.calls == 2
+    # the sampler's batch keeps its condition
+    torch.testing.assert_close(batch["gap"], torch.tensor([2.0, 5.0]))
+
+
+def test_cfg_scale_zero_is_one_call_of_the_conditional_model():
+    torch.manual_seed(0)
+    batch = conditioned_batch()
+    model = ConditionalModel()
+    eps = FieldCalculator(model)(batch)["eps_pred"]
+    gap = batch["gap"][batch[properties.idx_m], None]
+    torch.testing.assert_close(eps, gap * batch[properties.R])
+    assert model.calls == 1
+
+
+def test_cfg_scale_minus_one_is_the_unconditional_model():
+    torch.manual_seed(0)
+    batch = conditioned_batch()
+    calculator = FieldCalculator(
+        ConditionalModel(), cfg_scale=-1.0, condition_keys=["gap"]
+    )
+    torch.testing.assert_close(calculator(batch)["eps_pred"], -batch[properties.R])
+
+
+def test_cfg_needs_the_condition_keys():
+    with pytest.raises(ValueError, match="condition_keys"):
+        FieldCalculator(ConditionalModel(), cfg_scale=2.0)
+
+
+def test_cfg_on_the_head_is_cfg_on_the_field_an_update_steps_on():
+    # eps -> x0 is affine at a given x_t and t, and the two weights add up to 1
+    torch.manual_seed(0)
+    batch = conditioned_batch()
+    schedule, w = VP(), 1.5
+    x_t, t = batch[properties.R], torch.tensor(0.4)
+
+    def x0(calculator):
+        eps = calculator(batch)["eps_pred"]
+        return EpsParametrization().to_x0(schedule, eps, x_t, t)
+
+    guided = x0(
+        FieldCalculator(ConditionalModel(), cfg_scale=w, condition_keys=["gap"])
+    )
+    conditional = x0(FieldCalculator(ConditionalModel()))
+    unconditional = x0(
+        FieldCalculator(ConditionalModel(), cfg_scale=-1.0, condition_keys=["gap"])
+    )
+    torch.testing.assert_close(guided, (1 + w) * conditional - w * unconditional)

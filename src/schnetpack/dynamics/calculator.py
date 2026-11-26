@@ -12,7 +12,8 @@ A calculator runs a model for one family of drivers:
 - :class:`FieldCalculator` hands the
   :class:`~schnetpack.dynamics.sample.sampler.Sampler` the model's raw
   outputs at time t. Each update of the sampler converts its variable's head
-  into the field it steps on and adds its own guidance.
+  into the field it steps on and adds its own guidance. Classifier-free
+  guidance is the calculator's: it takes two model calls.
 
 Both share the plumbing of :class:`Calculator`: the device and dtype, the
 neighbor list, the gradient policy, the optional cache of the last outputs,
@@ -368,6 +369,20 @@ class FieldCalculator(Calculator):
     :class:`~schnetpack.generative.transforms.Diffuse` writes it in
     training: per atom under ``time_key`` and per structure under
     ``structure_time_key``.
+
+    With a ``cfg_scale`` w other than 0 it applies classifier-free guidance.
+    The model is called a second time without the conditions (NaN under
+    every one of ``condition_keys``, as
+    :class:`~schnetpack.generative.transforms.DropCondition` writes them in
+    training), and every head comes back as
+
+        (1 + w) conditional - w unconditional.
+
+    The two weights add up to 1 and eps, score, x0 and velocity are affine
+    in one another at a given x_t and t, so the field an update converts the
+    head into is combined the same way. For the logits of a masked variable
+    it is p_conditional^(1 + w) / p_unconditional^w, normalized. w = 0 is
+    the conditional model, w = -1 the unconditional one.
     """
 
     def __init__(
@@ -375,6 +390,8 @@ class FieldCalculator(Calculator):
         model: str | Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
         time_key: str = properties.t,
         structure_time_key: str = STRUCTURE_TIME_KEY,
+        cfg_scale: float = 0.0,
+        condition_keys: Sequence[str] = (),
         **kwargs,
     ):
         """
@@ -383,12 +400,35 @@ class FieldCalculator(Calculator):
                 updates step, or the path to a model saved on disk
             time_key: batch key for the time per atom
             structure_time_key: batch key for the time per structure
+            cfg_scale: scale w of the classifier-free guidance; 0 calls the
+                model once
+            condition_keys: batch keys of the conditions the guidance acts on
 
         Remaining keyword arguments are those of :class:`Calculator`.
         """
         super().__init__(model, **kwargs)
         self.time_key = time_key
         self.structure_time_key = structure_time_key
+        self.cfg_scale = cfg_scale
+        self.condition_keys = tuple(condition_keys)
+        if cfg_scale != 0.0 and not self.condition_keys:
+            raise ValueError(
+                f"cfg_scale = {cfg_scale} needs the condition_keys it acts on"
+            )
+
+    def _evaluate(self, batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
+        outputs = super()._evaluate(batch)
+        if self.cfg_scale == 0.0:
+            return outputs
+        no_condition = {
+            key: torch.full_like(batch[key], float("nan"))
+            for key in self.condition_keys
+        }
+        unconditional = super()._evaluate({**batch, **no_condition})
+        return {
+            key: value + self.cfg_scale * (value - unconditional[key])
+            for key, value in outputs.items()
+        }
 
     def with_time(self, batch: Mapping[str, Any], t: torch.Tensor) -> dict[str, Any]:
         """
