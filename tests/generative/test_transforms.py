@@ -6,6 +6,7 @@ from schnetpack.generative import (
     VE,
     VP,
     Diffuse,
+    DropCondition,
     EpsParametrization,
     FlowMatching,
     GaussianInterpolant,
@@ -349,3 +350,30 @@ def test_is_a_preprocessor(vp):
     assert d.is_preprocessor
     assert not d.is_postprocessor
     assert d.variables[0].noising is vp
+
+
+# --- dropping the condition ----------------------------------------------- #
+
+
+def test_drop_condition_removes_the_share_p_of_the_conditions():
+    torch.manual_seed(0)
+    gap = torch.rand(100_000) + 1.0
+    out = DropCondition("gap", p=0.1)({"gap": gap.clone()})["gap"]
+    dropped = torch.isnan(out)
+    # the binomial std of the share is 0.001
+    assert abs(dropped.float().mean().item() - 0.1) < 0.005
+    torch.testing.assert_close(out[~dropped], gap[~dropped])
+
+
+@pytest.mark.parametrize("p, dropped", [(0.0, False), (1.0, True)])
+def test_drop_condition_on_one_structure(p, dropped):
+    inputs = structure()
+    inputs["gap"] = torch.tensor([6.5], dtype=torch.float64)
+    out = DropCondition("gap", p=p)(inputs)["gap"]
+    assert out.shape == (1,) and out.dtype == torch.float64
+    assert torch.isnan(out).item() == dropped
+
+
+def test_drop_condition_refuses_a_p_that_is_no_probability():
+    with pytest.raises(ValueError, match="probability"):
+        DropCondition("gap", p=1.5)

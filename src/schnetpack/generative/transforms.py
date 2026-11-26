@@ -7,6 +7,9 @@ of a structure at one time in the dataloader and writes each variable's x_t,
 label and loss weight into the batch dict, so training is an ordinary
 supervised loss per variable. Theory:
 ``docs_new/generation/new_variables.md``.
+
+:class:`DropCondition` removes the condition of some structures, for a
+conditional model that is sampled with classifier-free guidance.
 """
 
 from collections.abc import Callable, Sequence
@@ -19,7 +22,7 @@ from schnetpack.generative.views import KeyView
 from schnetpack.model_format import register
 from schnetpack.transform.base import Transform
 
-__all__ = ["Diffuse"]
+__all__ = ["Diffuse", "DropCondition"]
 
 
 @register
@@ -173,4 +176,43 @@ class Diffuse(Transform):
             inputs[self.time_key] = t.repeat(atom_rows.read(inputs).shape[0])
         if self.structure_time_key is not None:
             inputs[self.structure_time_key] = t
+        return inputs
+
+
+@register
+class DropCondition(Transform):
+    """
+    Remove the condition of a structure with probability ``p``.
+
+    A model trained on the result learns the conditional field and, from the
+    structures without a condition, the unconditional one; classifier-free
+    guidance combines the two at sampling
+    (:class:`~schnetpack.dynamics.FieldCalculator`). A removed condition is
+    NaN, which :class:`~schnetpack.nn.ConditionEmbedding` reads as no
+    condition.
+
+    Runs per structure before collation or on a collated batch: the condition
+    holds one value per structure, and each is drawn on its own.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def __init__(self, key: str, p: float):
+        """
+        Args:
+            key: key of the condition, a floating tensor with one value per
+                structure
+            p: probability that a structure loses its condition
+        """
+        super().__init__()
+        if not 0.0 <= p <= 1.0:
+            raise ValueError(f"p must be a probability, got {p}")
+        self.key = key
+        self.p = p
+
+    def forward(self, inputs):
+        value = inputs[self.key]
+        drop = torch.rand(value.shape, device=value.device) < self.p
+        inputs[self.key] = value.masked_fill(drop, float("nan"))
         return inputs
