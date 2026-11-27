@@ -24,7 +24,9 @@ weighted term to its field:
 The weight carries a term into the unit of its field.
 :class:`HarmonicRestraint`, a force on the positions in eV/Angstrom, enters a
 physical force with a plain factor, a pseudo-force with Angstrom^2/eV, and a
-score with 1/kT, in 1/eV.
+score with 1/kT, in 1/eV. :class:`ClassifierGuidance`, the gradient of a
+squared property error, enters a score with one over the variance of the
+property.
 """
 
 from collections.abc import Mapping, Sequence
@@ -35,7 +37,7 @@ from torch import nn
 
 from schnetpack import properties
 
-__all__ = ["Guidance", "HarmonicRestraint"]
+__all__ = ["Guidance", "HarmonicRestraint", "ClassifierGuidance"]
 
 
 class Guidance(nn.Module):
@@ -196,6 +198,74 @@ class HarmonicRestraint(Guidance):
         forces.index_add_(0, idx[:, 1], f_j)
         forces.index_add_(0, idx[:, 0], -f_j)
         return forces
+
+
+class ClassifierGuidance(Guidance):
+    """
+    Guidance toward structures with a requested property y, from a model
+    that predicts the property on noised structures.
+
+    With a Gaussian likelihood of width s around the prediction,
+    log p_t(y | x) = -(model(x, t) - y)^2 / (2 s^2) up to a constant, and
+    :meth:`forward` returns its gradient by the positions for s = 1,
+
+        G = -1/2 grad_R sum_structures (model(x, t) - y)^2,
+
+    shaped like the positions. Added to the score of an
+    :class:`~schnetpack.dynamics.sample.sampler.SDEUpdate` with the weight
+    omega / s^2, this is classifier guidance [#cg1]_ of strength omega.
+
+    The model is called on the batch as the sampler holds it, which carries
+    the time per atom and per structure and the neighbor list of the
+    sampled model. It has to live on the sampler's device and dtype, and has
+    to compute its pair vectors from the positions
+    (:class:`~schnetpack.model.PairwiseDistances`), so that the prediction
+    can be differentiated by them.
+
+    References:
+
+    .. [#cg1] Dhariwal, Nichol: Diffusion models beat GANs on image
+       synthesis. NeurIPS 2021.
+    """
+
+    def __init__(
+        self,
+        model: nn.Module,
+        output_key: str,
+        target_key: str,
+        weight: float = 1.0,
+    ):
+        """
+        Args:
+            model: batch -> outputs, time-aware and trained on noised
+                structures
+            output_key: the model's output that holds the property, one
+                value per structure
+            target_key: batch key of the requested property, one value per
+                structure, in the unit of the model's output
+            weight: factor the gradient is scaled by; on a score, the
+                guidance strength over the variance of the likelihood
+        """
+        super().__init__(weight=weight)
+        self.model = model
+        self.output_key = output_key
+        self.target_key = target_key
+
+    def forward(self, batch):
+        with torch.enable_grad():
+            positions = batch[properties.R].detach().requires_grad_()
+            # a copy: the model writes its intermediate results into its inputs
+            outputs = self.model({**batch, properties.R: positions})
+            prediction = outputs[self.output_key].reshape(-1)
+            target = batch[self.target_key].reshape(-1).to(prediction)
+            if prediction.shape != target.shape:
+                raise ValueError(
+                    f"{self.output_key!r} holds {prediction.shape[0]} values, "
+                    f"{self.target_key!r} {target.shape[0]}: both need one per "
+                    "structure"
+                )
+            log_likelihood = -0.5 * ((prediction - target) ** 2).sum()
+            return torch.autograd.grad(log_likelihood, positions)[0]
 
 
 def guidance_terms(terms: Sequence) -> list[Guidance]:

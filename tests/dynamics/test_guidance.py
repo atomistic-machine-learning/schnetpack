@@ -1,10 +1,14 @@
 import pytest
 import torch
+from ase.build import molecule
 
+import schnetpack as spk
+import schnetpack.transform as trn
 from schnetpack import properties
 from schnetpack.dynamics import (
     LBFGS,
     AncestralUpdate,
+    ClassifierGuidance,
     DirectDenoising,
     Euler,
     FieldCalculator,
@@ -17,6 +21,7 @@ from schnetpack.dynamics import (
 )
 from schnetpack.generative import (
     SDE,
+    STRUCTURE_TIME_KEY,
     VP,
     EpsParametrization,
     GaussianInterpolant,
@@ -320,6 +325,121 @@ def test_sampler_runs_with_a_restraint():
     sampler = sde_sampler(model, process, guidance=[HarmonicRestraint()])
     out = sampler.run(batch, 10)
     assert torch.isfinite(out[properties.R]).all()
+
+
+# --- classifier guidance ---------------------------------------------------- #
+
+
+class DipoleLikeModel(torch.nn.Module):
+    """y = sum over the atoms of c . R, plus the structure's time."""
+
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("c", torch.tensor([1.0, -2.0, 0.5], dtype=torch.float64))
+
+    def forward(self, batch):
+        per_atom = batch[properties.R] @ self.c
+        y = torch.zeros_like(batch[STRUCTURE_TIME_KEY])
+        y = y.index_add(0, batch[properties.idx_m], per_atom)
+        return {"y": y + batch[STRUCTURE_TIME_KEY]}
+
+
+def timed_batch(t=0.4):
+    """Structures of 3 and 2 atoms at time t, with a requested property each."""
+    n_atoms = torch.tensor([3, 2])
+    batch = {
+        properties.n_atoms: n_atoms,
+        properties.idx_m: torch.repeat_interleave(torch.arange(2), n_atoms),
+        properties.R: torch.randn(5, 3, dtype=torch.float64),
+        "y_target": torch.tensor([1.5, -0.5], dtype=torch.float64),
+    }
+    return FieldCalculator(IDLE).with_time(batch, torch.tensor(t, dtype=torch.float64))
+
+
+def test_classifier_guidance_is_the_gradient_of_the_log_likelihood():
+    torch.manual_seed(0)
+    batch = timed_batch(t=0.4)
+    model = DipoleLikeModel()
+    guidance = ClassifierGuidance(model, "y", "y_target")
+
+    with torch.no_grad():  # as in a sampler that runs without autograd
+        term = guidance(batch)
+        error = model(batch)["y"] - batch["y_target"]
+
+    # -1/2 d/dR (y - y_target)^2 = -(y - y_target) c for every atom of the structure
+    expected = -error[batch[properties.idx_m], None] * model.c
+    torch.testing.assert_close(term, expected)
+    assert not term.requires_grad
+    assert not batch[properties.R].requires_grad
+
+
+def test_classifier_guidance_differentiates_a_network_and_leaves_the_batch():
+    torch.manual_seed(0)
+    model = spk.model.NeuralNetworkPotential(
+        representation=spk.model.PaiNN(
+            n_atom_basis=16,
+            n_interactions=2,
+            radial_basis=spk.nn.GaussianRBF(n_rbf=8, cutoff=5.0),
+            cutoff_fn=spk.nn.CosineCutoff(5.0),
+        ),
+        input_modules=[spk.model.PairwiseDistances()],
+        output_modules=[spk.model.Atomwise(n_in=16, output_key="gap")],
+    ).double()
+    converter = spk.interfaces.AtomsConverter(
+        neighbor_list=trn.MatScipyNeighborList(cutoff=5.0), dtype=torch.float64
+    )
+    batch = converter([molecule("CH3CH2OH"), molecule("H2O")])
+    batch["gap_target"] = torch.tensor([0.3, -0.2], dtype=torch.float64)
+    keys = set(batch)
+    term = ClassifierGuidance(model, "gap", "gap_target")(batch)
+    assert set(batch) == keys
+
+    def log_likelihood(positions):
+        gap = model({**batch, properties.R: positions})["gap"]
+        return -0.5 * ((gap - batch["gap_target"]) ** 2).sum()
+
+    # a central difference along a random direction
+    direction = torch.randn_like(term)
+    h = 1e-5
+    positions = batch[properties.R]
+    difference = (
+        log_likelihood(positions + h * direction)
+        - log_likelihood(positions - h * direction)
+    ) / (2 * h)
+    torch.testing.assert_close(
+        (term * direction).sum(), difference.detach(), rtol=1e-6, atol=1e-9
+    )
+
+
+def test_classifier_guidance_needs_one_target_per_structure():
+    batch = timed_batch()
+    batch["y_target"] = torch.zeros(5, dtype=torch.float64)
+    with pytest.raises(ValueError, match="one per structure"):
+        ClassifierGuidance(DipoleLikeModel(), "y", "y_target")(batch)
+
+
+def test_classifier_guidance_moves_the_samples_toward_the_target():
+    # y = c . R of one atom; unguided samples have y around 0
+    torch.manual_seed(0)
+    process = GaussianInterpolant(VP())
+    model = batch_model(analytic_score(process, 0.0, 1.0))
+
+    def mean_y(guidance):
+        sampler = sde_sampler(model, process, guidance=guidance)
+        n = 2000
+        batch = {
+            properties.n_atoms: torch.ones(n, dtype=torch.long),
+            properties.idx_m: torch.arange(n),
+            properties.R: torch.randn(n, 3, dtype=torch.float64),
+            "y_target": torch.full((n,), 4.0, dtype=torch.float64),
+        }
+        positions = sampler.run(batch, 50)[properties.R]
+        return (positions @ DipoleLikeModel().c).mean().item()
+
+    guided = mean_y([ClassifierGuidance(DipoleLikeModel(), "y", "y_target")])
+    unguided = mean_y([])
+    assert abs(unguided) < 0.2
+    assert 2.0 < guided < 4.5
 
 
 # --- who refuses what ------------------------------------------------------- #
