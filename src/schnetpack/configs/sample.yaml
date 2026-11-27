@@ -17,12 +17,21 @@ sample:
   batch_size: 1000  # structures per model call
   seed: null  # default: the run's training seed
   compile: false
+  # values written into every structure, by batch key: the condition of a conditional
+  # model (a condition left out means no condition), the target of a guidance term,
+  # e.g. 'sample.condition={gap: 4.8}'
+  condition: null
+  # classifier-free guidance of a conditional model: its head becomes
+  # (1 + cfg_scale) conditional - cfg_scale unconditional; 0 is the conditional model
+  cfg_scale: 0.0
   # one update per variable of the model's generative: block, by its key; the
-  # variables are drawn from their priors in this order
+  # variables are drawn from their priors in this order. An update takes guidance:
+  # a list of terms (schnetpack.dynamics.guidance) added to the field it steps on
   updates:
     positions:
       _target_: schnetpack.dynamics.AncestralUpdate
       _partial_: true
+      guidance: []
   grid:
     _target_: schnetpack.dynamics.KarrasGrid
     t_min: 1e-3

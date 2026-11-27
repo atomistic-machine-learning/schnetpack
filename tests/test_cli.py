@@ -322,6 +322,139 @@ def test_spk_sample_takes_a_model_folder_and_the_compositions_of_a_db(
     assert grid["_target_"] == "schnetpack.dynamics.KarrasGrid"
 
 
+# the positions variable of the untrained models below
+POSITIONS = {
+    "_target_": "schnetpack.generative.Variable",
+    "name": "positions",
+    "view": "_positions",
+    "per": "atom",
+    "noising": {
+        "_target_": "schnetpack.generative.GaussianInterpolant",
+        "schedule": {
+            "_target_": "schnetpack.generative.VELinear",
+            "sigma_max": 30.0,
+            "t_min": 0.0,
+        },
+        "prior": {
+            "_target_": "schnetpack.generative.GaussianPrior",
+            "std": 30.0,
+            "centered": False,
+        },
+    },
+    "parametrization": {"_target_": "schnetpack.generative.EpsParametrization"},
+    "output_key": "eps_pred",
+}
+
+
+def painn(output_module, electronic_embeddings=None):
+    return schnetpack.model.NeuralNetworkPotential(
+        representation=schnetpack.model.PaiNN(
+            n_atom_basis=16,
+            n_interactions=1,
+            radial_basis=schnetpack.nn.GaussianRBF(n_rbf=8, cutoff=150.0),
+            cutoff_fn=schnetpack.nn.CosineCutoff(150.0),
+            electronic_embeddings=electronic_embeddings,
+        ),
+        input_modules=[schnetpack.model.PairwiseDistances()],
+        output_modules=[output_module],
+    )
+
+
+@pytest.fixture
+def conditional_model(tmp_path):
+    """An untrained model of the positions, conditioned on a gap."""
+    torch.manual_seed(0)
+    model = painn(
+        schnetpack.model.AtomwiseVector(n_in=16, output_key="eps_pred"),
+        [schnetpack.nn.ConditionEmbedding("gap", 16, mean=6.0, std=2.0)],
+    )
+    path = tmp_path / "conditional"
+    schnetpack.save_model(
+        model, str(path), blocks={"generative": {"positions": POSITIONS}}
+    )
+    return path
+
+
+def sampled_positions(tmp_path, model, out, *overrides):
+    spk(
+        "sample",
+        f"model_dir={model}",
+        f"db={TEST_QM9}",
+        f"out={out}",
+        "sample.seed=1",
+        "sample.n_samples=3",
+        "sample.batch_size=3",
+        "sample.n_steps=[3]",
+        *overrides,
+        cwd=tmp_path,
+    )
+    with connect(tmp_path / out / "steps3_seed1.db") as db:
+        rows = list(db.select())
+        return np.concatenate([row.positions for row in rows]), db.metadata
+
+
+def test_spk_sample_conditions_a_model_and_applies_cfg(conditional_model, tmp_path):
+    model = conditional_model
+    # a condition that is not given: the model's unconditional branch
+    unconditional, _ = sampled_positions(tmp_path, model, "unconditional")
+    conditional, _ = sampled_positions(
+        tmp_path, model, "conditional", "sample.condition={gap: 9.0}"
+    )
+    # scale -1 mixes the two heads into the unconditional one
+    mixed, meta = sampled_positions(
+        tmp_path, model, "mixed", "sample.condition={gap: 9.0}", "sample.cfg_scale=-1.0"
+    )
+
+    assert np.isfinite(conditional).all()
+    assert not np.allclose(conditional, unconditional, atol=1e-2)
+    np.testing.assert_allclose(mixed, unconditional, atol=1e-2)
+    assert meta["sample"]["cfg_scale"] == -1.0
+    assert meta["sample"]["condition"] == {"gap": 9.0}
+
+
+def test_spk_sample_takes_cfg_only_for_a_conditional_model(generative_run, tmp_path):
+    failed = spk(
+        "sample",
+        f"model_dir={generative_run}",
+        "sample.cfg_scale=2.0",
+        cwd=tmp_path,
+        check=False,
+    )
+    assert failed.returncode != 0 and "needs a conditional model" in failed.stderr
+
+
+def test_spk_sample_adds_the_guidance_of_an_update(conditional_model, tmp_path):
+    torch.manual_seed(1)
+    predictor = painn(
+        schnetpack.model.Atomwise(n_in=16, output_key="gap", aggregation_mode="avg")
+    )
+    schnetpack.save_model(predictor, str(tmp_path / "predictor"))
+
+    def update(weight):
+        term = (
+            "{_target_: schnetpack.dynamics.ClassifierGuidance, "
+            f"model: {{_target_: schnetpack.load_model, path: '{tmp_path}/predictor'}}, "
+            f"output_key: gap, target_key: gap_target, weight: {weight}}}"
+        )
+        return (
+            "sample.updates.positions={_target_: schnetpack.dynamics.SDEUpdate, "
+            f"_partial_: true, guidance: [{term}]}}"
+        )
+
+    target = "sample.condition={gap_target: 9.0}"
+    free, _ = sampled_positions(
+        tmp_path, conditional_model, "free", update(0.0), target
+    )
+    guided, meta = sampled_positions(
+        tmp_path, conditional_model, "guided", update(50.0), target
+    )
+
+    assert np.isfinite(guided).all()
+    assert not np.allclose(guided, free, atol=1e-2)
+    guidance = meta["sample"]["updates"]["positions"]["guidance"]
+    assert guidance[0]["target_key"] == "gap_target"
+
+
 def test_spk_evaluate_writes_one_entry_per_db_to_eval_json(tmp_path):
     pytest.importorskip("rdkit")
     for name in ("steps5_seed3", "steps7_seed3"):

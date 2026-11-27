@@ -29,8 +29,15 @@ def main(config: DictConfig):
     folder or a spk train run folder) and write one ASE db per number of steps to
     ``out``. The compositions are those of ``db``, or else of the run's test split.
     The settings are the model's ``sample:`` block over the ``sample:`` block of
-    configs/sample.yaml, under the command line's ``sample.*`` keys."""
+    configs/sample.yaml, under the command line's ``sample.*`` keys.
+
+    ``sample.condition`` holds values written into every structure, by batch key: the
+    condition of a conditional model, the target of a guidance term. A conditional
+    model whose condition is not given runs without it (NaN). ``sample.cfg_scale``
+    is the scale of the classifier-free guidance, and an update's ``guidance`` lists
+    the terms added to the field it steps on."""
     from schnetpack.dynamics import DatasetStructures, FieldCalculator, Sampler
+    from schnetpack.nn import ConditionEmbedding
 
     run = None
     if os.path.exists(os.path.join(config.model_dir, "config.yaml")):
@@ -67,22 +74,52 @@ def main(config: DictConfig):
     # objects
     generative = hydra.utils.instantiate(blocks["generative"], _convert_="all")
     updates = [
-        hydra.utils.instantiate(update)(generative[name])
+        hydra.utils.instantiate(update, _convert_="all")(generative[name])
         for name, update in sample.updates.items()
     ]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    for update in updates:
+        for term in update.guidance:
+            term.to(device)
     model_path = os.path.abspath(config.model_dir)
+    model = load_model(model_path, device=device).eval()
+    condition_keys = [
+        module.property_key
+        for module in model.modules()
+        if isinstance(module, ConditionEmbedding)
+    ]
+    if sample.cfg_scale != 0.0 and not condition_keys:
+        raise ValueError(
+            f"sample.cfg_scale={sample.cfg_scale} needs a conditional model; "
+            f"{config.model_dir} has no ConditionEmbedding"
+        )
+    # a condition that is not given is NaN: the model's unconditional branch
+    condition = {key: float("nan") for key in condition_keys}
+    condition.update(sample.condition or {})
+
+    def write_condition(batch):
+        n_structures = batch[properties.n_atoms].shape[0]
+        for key, value in condition.items():
+            batch[key] = torch.full((n_structures,), float(value))
+        return batch
+
     sampler = Sampler(
         FieldCalculator(
-            load_model(model_path, device=device).eval(),
+            model,
             device=device,
             compile=sample.compile,
+            cfg_scale=sample.cfg_scale,
+            condition_keys=condition_keys,
         ),
         updates=updates,
         start=[generative[name] for name in sample.updates],
         grid=hydra.utils.instantiate(sample.grid),
         structures=DatasetStructures(
-            dataset, transforms=hydra.utils.instantiate(sample.structure_transforms)
+            dataset,
+            transforms=[
+                *hydra.utils.instantiate(sample.structure_transforms),
+                write_condition,
+            ],
         ),
     )
     gpu = torch.cuda.get_device_name() if device.type == "cuda" else "cpu"
