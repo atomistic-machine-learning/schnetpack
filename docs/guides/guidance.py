@@ -8,7 +8,7 @@
 #
 # $$E = \tfrac{1}{2}\, k\, (d - d_0)^2,$$
 #
-# summed per structure. Pairs, target distances and force constants are not arguments of the module but keys of the batch, so they collate with the structures, and every structure of a batch may carry its own restraints, or none. Its forward pass takes a batch and returns the restraint's `forces` per atom, in eV/Å; its `energy` method gives the energy per structure. The batch itself is left unchanged. Guidance returns no energy in general, only a force-like term, so the same contract also carries guidance that is no energy (kT ∇ log p) when sampling, on a `GenerativeCalculator`.
+# summed per structure. Pairs, target distances and force constants are not arguments of the module but keys of the batch, so they collate with the structures, and every structure of a batch may carry its own restraints, or none. Its forward pass takes a batch and returns the restraint's `forces` per atom, in eV/Å; its `energy` method gives the energy per structure. The batch itself is left unchanged. Guidance returns no energy in general, only a force-like term, so the same contract also carries guidance that is no energy (kT ∇ log p) when sampling, where the updates of a `Sampler` add it to their field; see the guide on guided sampling.
 
 # %%
 import torch

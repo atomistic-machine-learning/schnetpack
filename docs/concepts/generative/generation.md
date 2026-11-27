@@ -93,6 +93,12 @@ Guidance adds a weighted term to the field. It therefore acts at every evaluatio
 - **On a force** (optimization): $F\leftarrow F+\omega\,G$ with a force-like term $G$, e.g. the restraint force $G=-\nabla E_{\mathrm r}$ of a restraint energy $E_{\mathrm r}$ that holds selected distances near target values.
 - **On a score** (sampling): $s\leftarrow s+\omega\,\nabla_x\log p_t(y\mid x)$, which steers toward structures with a property $y$ (classifier guidance) [5, 12]. The classifier $p_t(y\mid x)$ has to be trained on noisy structures. A restraint enters the same way, as $-\omega\nabla E_{\mathrm r}$. The velocity and the denoiser follow from the guided score through the conversions in [parametrizations §6](parametrizations.md#6-score).
 
+### 3.3 Classifier-free guidance
+
+Classifier-free guidance needs no classifier. One model is trained with a condition $y$ that is dropped for a share of the training structures, so it learns the conditional and the unconditional field. Sampling mixes its two heads, $h\leftarrow(1+w)\,h(x_t,t,y)-w\,h(x_t,t)$, with the guidance scale $w$: $w=0$ is the conditional model, $w=-1$ the unconditional one. The mix is the same for an eps, score, x0 or velocity head, since they are affine in each other and the weights sum to one. How a model takes the condition is a question of its architecture and separate from the guidance.
+
+In the library, a constraint is a hook, guidance a term on a calculator or on an update, and classifier-free guidance an argument of the calculator; see the guide on [guided sampling](../../guides/guided_sampling.md).
+
 ---
 
 ## References

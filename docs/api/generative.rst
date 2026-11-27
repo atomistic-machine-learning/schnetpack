@@ -173,7 +173,9 @@ time.
 Training
 --------
 
-The training step, as a data-pipeline transform over a list of variables.
+The training step, as a data-pipeline transform over a list of variables, and the
+transform that drops the condition of a share of the structures for classifier-free
+guidance.
 
 .. autosummary::
     :toctree: generated
@@ -181,3 +183,4 @@ The training step, as a data-pipeline transform over a list of variables.
     :template: classtemplate.rst
 
     Diffuse
+    DropCondition

@@ -20,7 +20,8 @@ job, and ``spkmd`` for molecular dynamics.
       - Predict properties of the structures in an ASE db with a trained model.
     * - ``spk sample model_dir=<model>``
       - Sample structures with a generative model, with the compositions of its run's
-        test split or of ``db=``.
+        test split or of ``db=``. ``sample.condition``, ``sample.cfg_scale`` and an
+        update's ``guidance`` steer it, see :doc:`/guides/guided_sampling`.
     * - ``spk evaluate dbs=<dbs>``
       - Validity and uniqueness of generated molecules (RDKit), into ``eval.json``.
     * - ``spk deploy model_dir=<model> out=<package.pt2>``

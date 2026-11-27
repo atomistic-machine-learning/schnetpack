@@ -132,7 +132,14 @@ that. Models deployed for LAMMPS with `spkdeploy` are unchanged.
   - `Sampler`, with SDE, ODE and ancestral updates on a time grid.
   - Force, score, velocity, noise and x0 calculators.
   - Hooks such as `FreezeScaffold`, and guidance terms such as
-    `HarmonicRestraint`.
+    `HarmonicRestraint` and `ClassifierGuidance` (the gradient of a property
+    model trained on noised structures), added by a `ForceCalculator` to its
+    forces and by a sampler's update to its field.
+  - Classifier-free guidance: `FieldCalculator(cfg_scale=, condition_keys=)`
+    mixes the conditional and the unconditional head of a model trained with
+    `schnetpack.nn.ConditionEmbedding` and `schnetpack.generative.DropCondition`.
+    `spk sample` takes `sample.condition`, `sample.cfg_scale` and the guidance
+    terms of an update. See the guide "Guided sampling".
   - Structure providers, and `BatchNeighborList`.
 - `schnetpack.generative`:
   - Noise schedules (VE, VP, flow matching).

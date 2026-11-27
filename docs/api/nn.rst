@@ -24,6 +24,7 @@ Embeddings
 
     NuclearEmbedding
     ElectronicEmbedding
+    ConditionEmbedding
 
 
 Equivariant layers

@@ -75,7 +75,7 @@ Heun is second order for the variables it steps only when every variable is smoo
 
 ### 3.6 Guidance
 
-Guidance ([generation §3.2](generation.md#32-guidance)) acts on the positions. With several variables the calculator adds it to the fields it is named for, typically the positions' score, at every model call, so also at every stage of a step. The other variables see it only through the positions.
+Guidance ([generation §3.2](generation.md#32-guidance)) acts on the positions. With several variables each update adds the guidance it is given to the field of its own variable, typically the positions' score, at every model call, so also at every stage of a step. The other variables see it only through the positions.
 
 ---
 

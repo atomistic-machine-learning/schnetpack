@@ -123,6 +123,7 @@ guides/md_cli
 guides/batchwise_relaxations
 guides/ensembles_uncertainty
 guides/guidance
+guides/guided_sampling
 guides/lammps
 ```
 

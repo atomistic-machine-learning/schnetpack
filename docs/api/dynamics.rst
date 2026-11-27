@@ -57,6 +57,7 @@ diffusion, and the grids its steps land on.
     Heun
     TimeGrid
     UniformGrid
+    KarrasGrid
 
 
 Calculators
@@ -77,7 +78,8 @@ Calculators
 Hooks
 -----
 
-Edits of the batch before and/or after every step of a driver.
+Edits of the batch before and/or after every step of a driver, e.g. to hold a part of
+every structure fixed (:doc:`/guides/guided_sampling`).
 
 .. autosummary::
     :toctree: generated
@@ -91,7 +93,11 @@ Edits of the batch before and/or after every step of a driver.
 Guidance
 --------
 
-Terms a calculator adds to the field it returns: to the forces, or to the score.
+Terms added to the field a driver steps on: a
+:class:`ForceCalculator` adds them to the model's forces, an :class:`Update` of a
+:class:`Sampler` to its score, velocity or denoised structure. Classifier-free guidance
+is not a term but an argument of the :class:`FieldCalculator` (``cfg_scale``). See
+:doc:`/guides/guidance` and :doc:`/guides/guided_sampling`.
 
 .. autosummary::
     :toctree: generated
@@ -100,6 +106,7 @@ Terms a calculator adds to the field it returns: to the forces, or to the score.
 
     Guidance
     HarmonicRestraint
+    ClassifierGuidance
 
 
 Uncertainty
